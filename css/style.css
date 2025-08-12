@@ -309,3 +309,62 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial}
 .placeholder-text {
     color: var(--muted);
 }
+
+/* Group by section styling */
+.group-by-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 0 12px;
+    border-top: 1px solid #f0f2f7;
+}
+
+.group-by-section label {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.group-by-section select {
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid #e2e6ef;
+    width: 100%;
+}
+
+.group-header {
+    display: flex; /* Make it a flex container */
+    justify-content: space-between; /* Space out title and button */
+    align-items: center; /* Vertically align items */
+    font-weight: 700;
+    margin-top: 15px;
+    margin-bottom: 5px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #e7eaf2;
+    color: var(--accent);
+    font-size: 1.1em;
+    cursor: pointer; /* Indicate it's clickable */
+}
+
+.group-header h4 {
+    margin: 0; /* Remove default margin from h3 */
+    flex-grow: 1; /* Allow h3 to take available space */
+}
+
+.toggle-group-btn {
+    background: none;
+    border: none;
+    font-size: 1.2em; /* Make arrow a bit bigger */
+    cursor: pointer;
+    color: var(--muted); /* Muted color for the arrow */
+    padding: 0 5px; /* Some padding around the arrow */
+}
+
+.group-content {
+    overflow: hidden; /* Hide overflow when collapsed */
+    max-height: 1000px; /* Arbitrarily large max-height for smooth transition */
+    transition: max-height 0.1s ease-out; /* Smooth collapse/expand */
+}
+
+.group-content:not(.show) {
+    max-height: 0; /* Collapse height to 0 */
+}

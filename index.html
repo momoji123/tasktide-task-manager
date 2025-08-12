@@ -87,6 +87,17 @@
     .filter-date-group .date-inputs-inline input {
       flex: 1; /* Make inputs take equal space */
     }
+
+    /* New styles for group by headers */
+    .group-header {
+        font-weight: 700;
+        margin-top: 15px;
+        margin-bottom: 5px;
+        padding-bottom: 5px;
+        border-bottom: 1px solid #e7eaf2;
+        color: var(--accent);
+        font-size: 1.1em;
+    }
   </style>
 </head>
 <body>
@@ -154,15 +165,32 @@
           
           <label>Status</label>
           <select id="filterStatus"><option value="__all">All</option></select>
-          <label>Sort by</label>
-          <select id="sortBy">
-            <option value="updatedAt">Last updated</option>
-            <option value="deadline">Deadline</option>
-            <option value="priority">Priority</option>
-            <option value="from">From</option>
-          </select>
         </section>
       </div>
+      <!-- Group By Section - outside filters -->
+      <section class="group-by-section">
+        <label>Group by</label>
+        <select id="groupBy">
+          <option value="__none">None</option>
+          <option value="from">From</option>
+          <option value="status">Status</option>
+          <option value="priority">Priority</option>
+          <option value="category">Category</option>
+          <option value="deadlineYear">Deadline (Year)</option>
+          <option value="deadlineMonthYear">Deadline (Month + Year)</option>
+          <option value="finishDateYear">Finished Date (Year)</option>
+          <option value="finishDateMonthYear">Finished Date (Month + Year)</option>
+          <option value="createdAtYear">Creation Date (Year)</option>
+          <option value="createdAtMonthYear">Creation Date (Month + Year)</option>
+        </select>
+        <label>Sort by</label>
+        <select id="sortBy">
+          <option value="updatedAt">Last updated</option>
+          <option value="deadline">Deadline</option>
+          <option value="priority">Priority</option>
+          <option value="from">From</option>
+        </select>
+      </section>
       <section id="taskList" class="task-list"></section>
     </aside>
 

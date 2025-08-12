@@ -10,10 +10,10 @@ export const UI = (function() {
     selectedFilterCategoriesDisplay: '#selectedFilterCategoriesDisplay',
     filterCategoryDropdownContent: '#filterCategoryDropdownContent',
 
-    filterStatus: '#filterStatus', sortBy: '#sortBy',
+    filterStatus: '#filterStatus', sortBy: '#sortBy', groupBy: '#groupBy', // Add groupBy selector
     // Updated date range selectors
     createdRangeFrom: '#createdRangeFrom', createdRangeTo: '#createdRangeTo',
-    updatedRangeFrom: '#updatedRangeFrom', updatedRangeTo: '#updatedRangeTo',
+    updatedRangeFrom: '#updatedRangeTo', updatedRangeTo: '#updatedRangeTo',
     deadlineRangeFrom: '#deadlineRangeFrom', deadlineRangeTo: '#deadlineRangeTo',
     finishedRangeFrom: '#finishedRangeFrom', finishedRangeTo: '#finishedRangeTo',
 
@@ -140,6 +140,7 @@ export const UI = (function() {
 
     document.querySelector(selectors.searchInput).addEventListener('input', renderTaskList);
     document.querySelector(selectors.sortBy).addEventListener('change', renderTaskList);
+    document.querySelector(selectors.groupBy).addEventListener('change', renderTaskList); // Add listener for groupBy
     // document.querySelector(selectors.filterCategory).addEventListener('change', renderTaskList); // Removed for multi-select
     document.querySelector(selectors.filterStatus).addEventListener('change', renderTaskList);
     
@@ -188,6 +189,7 @@ export const UI = (function() {
     const q = document.querySelector(selectors.searchInput).value.toLowerCase();
     const filterStat = document.querySelector(selectors.filterStatus).value;
     const sortVal = document.querySelector(selectors.sortBy).value;
+    const groupVal = document.querySelector(selectors.groupBy).value; // Get groupBy value
 
     // Get values for all new date range filters
     const createdRF = document.querySelector(selectors.createdRangeFrom).value;
@@ -245,15 +247,137 @@ export const UI = (function() {
       return true;
     });
 
-    filtered.sort((a, b) => {
-      if (sortVal === 'deadline') return (a.deadline || '').localeCompare(b.deadline || '');
-      if (sortVal === 'priority') return a.priority - b.priority;
-      if (sortVal === 'from') return (a.from || '').localeCompare(b.from || '');
-      return (b.updatedAt || '').localeCompare(a.updatedAt || '');
-    });
+    // Grouping logic
+    if (groupVal === '__none') {
+        // No grouping, just sort and render
+        filtered.sort((a, b) => {
+            if (sortVal === 'deadline') return (a.deadline || '').localeCompare(b.deadline || '');
+            if (sortVal === 'priority') return a.priority - b.priority;
+            if (sortVal === 'from') return (a.from || '').localeCompare(b.from || '');
+            return (b.updatedAt || '').localeCompare(a.updatedAt || '');
+        });
+        renderTaskItems(container, filtered);
+    } else {
+        const groupedTasks = {};
+        
+        filtered.forEach(task => {
+            if (groupVal === 'category' && task.categories && task.categories.length > 0) {
+                // If grouping by category and task has multiple categories, add to each group
+                task.categories.forEach(category => {
+                    const groupKey = category || 'No Category';
+                    if (!groupedTasks[groupKey]) {
+                        groupedTasks[groupKey] = [];
+                    }
+                    // Avoid duplicate tasks if they appear multiple times due to other filters
+                    if (!groupedTasks[groupKey].some(t => t.id === task.id)) {
+                        groupedTasks[groupKey].push(task);
+                    }
+                });
+            } else {
+                let groupKey;
+                switch (groupVal) {
+                    case 'from':
+                        groupKey = task.from || 'No From';
+                        break;
+                    case 'status':
+                        groupKey = task.status || 'No Status';
+                        break;
+                    case 'priority':
+                        groupKey = task.priority ? task.priority : "No Priority";
+                        break;
+                    case 'deadlineYear':
+                        groupKey = task.deadline ? new Date(task.deadline).getFullYear().toString() : 'No Deadline';
+                        break;
+                    case 'deadlineMonthYear':
+                        groupKey = task.deadline ? new Date(task.deadline).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : 'No Deadline';
+                        break;
+                    case 'finishDateYear':
+                        groupKey = task.finishDate ? new Date(task.finishDate).getFullYear().toString() : 'No Finish Date';
+                        break;
+                    case 'finishDateMonthYear':
+                        groupKey = task.finishDate ? new Date(task.finishDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : 'No Finish Date';
+                        break;
+                    case 'createdAtYear':
+                        groupKey = task.createdAt ? new Date(task.createdAt).getFullYear().toString() : 'No Creation Date';
+                        break;
+                    case 'createdAtMonthYear':
+                        groupKey = task.createdAt ? new Date(task.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : 'No Creation Date';
+                        break;
+                    default:
+                        groupKey = 'No Group';
+                }
 
+                if (!groupedTasks[groupKey]) {
+                    groupedTasks[groupKey] = [];
+                }
+                groupedTasks[groupKey].push(task);
+            }
+        });
+
+        // Sort group keys
+        const sortedGroupKeys = Object.keys(groupedTasks).sort((a, b) => {
+            // Special handling for date groups to sort numerically
+            if (groupVal.includes('MonthYear')) {
+                // For month-year, parse to date objects for proper sorting
+                const dateA = new Date(a);
+                const dateB = new Date(b);
+                if (!isNaN(dateA.getTime()) && !isNaN(dateB.getTime())) return dateA.getTime() - dateB.getTime();
+            } else if (groupVal.includes('Year')) {
+                const yearA = parseInt(a.replace(/\D/g, ''), 10);
+                const yearB = parseInt(b.replace(/\D/g, ''), 10);
+                if (!isNaN(yearA) && !isNaN(yearB)) return yearA - yearB;
+            } else if (groupVal === 'priority') {
+                // Extract priority number for sorting
+                const pA = parseInt(a.replace('Priority ', ''), 10);
+                const pB = parseInt(b.replace('Priority ', ''), 10);
+                if (!isNaN(pA) && !isNaN(pB)) return pA - pB;
+            }
+            console.log("default")
+            // Default alphabetical sort for other keys, with 'No X' last
+            if (a.startsWith('No ')) return 1;
+            if (b.startsWith('No ')) return -1;
+            return a.localeCompare(b);
+        });
+
+        // Render grouped tasks with collapsible sections
+        sortedGroupKeys.forEach(groupKey => {
+            const groupHeaderDiv = document.createElement('div');
+            groupHeaderDiv.className = 'group-header';
+            groupHeaderDiv.innerHTML = `
+                <h4>${groupKey}</h4>
+                <button class="toggle-group-btn" data-group-key="${escapeHtml(groupKey)}">&#9660;</button>
+            `; // Down arrow initially
+
+            const groupContentDiv = document.createElement('div');
+            groupContentDiv.className = 'group-content show'; // Initially show content
+
+            container.appendChild(groupHeaderDiv);
+            container.appendChild(groupContentDiv);
+
+            // Add event listener to toggle content visibility
+            groupHeaderDiv.querySelector('.toggle-group-btn').addEventListener('click', (e) => {
+                const btn = e.target;
+                const content = btn.parentElement.nextElementSibling; // The div immediately after the header
+                content.classList.toggle('show');
+                btn.innerHTML = content.classList.contains('show') ? '&#9660;' : '&#9658;'; // Toggle arrow direction
+            });
+
+            // Sort tasks within each group
+            groupedTasks[groupKey].sort((a, b) => {
+                if (sortVal === 'deadline') return (a.deadline || '').localeCompare(b.deadline || '');
+                if (sortVal === 'priority') return a.priority - b.priority;
+                if (sortVal === 'from') return (a.from || '').localeCompare(b.from || '');
+                return (b.updatedAt || '').localeCompare(a.updatedAt || '');
+            });
+
+            renderTaskItems(groupContentDiv, groupedTasks[groupKey]);
+        });
+    }
+  }
+
+  function renderTaskItems(container, tasksToRender) {
     const tmpl = document.getElementById('task-item-template').content;
-    filtered.forEach(t => {
+    tasksToRender.forEach(t => {
       const node = tmpl.cloneNode(true);
       const el = node.querySelector('.task-item');
       el.querySelector('.title').textContent = t.title || '(no title)';
@@ -279,6 +403,7 @@ export const UI = (function() {
       container.appendChild(node);
     });
   }
+
 
   // New function to render the multi-select category filter UI
   async function renderFilterCategoriesMultiSelect() {
