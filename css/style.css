@@ -54,7 +54,7 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial}
 .label{font-size:12px;color:var(--muted);margin:8px 0 4px}
 .tag-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 .tag{background:#e7eaf2;padding:4px 8px;border-radius:12px;font-size:12px}
-.tag.selected{background:var(--accent);color:#fff}
+.tag.selected{background:var(--accent);color:#fff;margin-bottom: 1em;width: fit-content;}
 .tag button{background:none;border:none;color:inherit;cursor:pointer;margin-left:4px;font-size:10px}
 .attach-list{margin-top:8px;display:flex;flex-direction:column;gap:6px}
 .attachment{display:flex;justify-content:space-between;align-items:center;background:#f9fbff;padding:4px 8px;border-radius:6px;font-size:12px}

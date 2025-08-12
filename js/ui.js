@@ -20,37 +20,43 @@ export const UI = (function() {
   let filterSectionVisible = true; // Default state for filter section visibility
 
   // Helper function for creating a modal
-  function createModal(title, contentHtml) {
+  function createModal(title, contentHtml, showSaveButton = true) {
     const tmpl = document.getElementById('modal-template').content;
     const modalFragment = tmpl.cloneNode(true);
-    // Get a reference to the actual modal backdrop element BEFORE appending the fragment.
-    // Once appended, the fragment's children become direct children of the body,
-    // and the original 'modalFragment' itself is no longer in the DOM.
     const modalBackdrop = modalFragment.querySelector('.modal-backdrop');
 
     modalFragment.querySelector('h3').textContent = title;
     modalFragment.querySelector('.modal-body').innerHTML = contentHtml;
     
-    // Add logic to save and close the modal
     const saveBtn = modalFragment.querySelector('.modal-save');
     const cancelBtn = modalFragment.querySelector('.modal-cancel');
     const closeBtn = modalFragment.querySelector('.modal-close');
 
+    // Hide save button if not needed (e.g., for alerts)
+    if (!showSaveButton) {
+      saveBtn.style.display = 'none';
+      cancelBtn.textContent = 'Close'; // Change cancel to close for alerts
+    } else {
+      saveBtn.textContent = 'Save'; // Ensure it says save for regular modals
+      saveBtn.classList.remove('danger'); // Remove danger class for generic save
+    }
+
     return new Promise((resolve) => {
       saveBtn.addEventListener('click', () => {
-        const textarea = modalBackdrop.querySelector('textarea'); // Use modalBackdrop to query content
-        document.body.removeChild(modalBackdrop); // Remove the direct child
-        resolve(textarea ? textarea.value : null); // Handle cases where textarea might not exist
+        // For general modals, we assume the content itself manages the value or it's a confirmation
+        // For this new list manager modal, the showListManagerModal will handle resolution.
+        document.body.removeChild(modalBackdrop);
+        resolve(true); // Indicate save action was clicked
       });
       cancelBtn.addEventListener('click', () => {
-        document.body.removeChild(modalBackdrop); // Remove the direct child
-        resolve(null);
+        document.body.removeChild(modalBackdrop);
+        resolve(false); // Indicate cancel/close action was clicked
       });
       closeBtn.addEventListener('click', () => {
-        document.body.removeChild(modalBackdrop); // Remove the direct child
-        resolve(null);
+        document.body.removeChild(modalBackdrop);
+        resolve(false); // Indicate close action was clicked
       });
-      document.body.appendChild(modalFragment); // Append the fragment, its children become direct body children
+      document.body.appendChild(modalFragment);
     });
   }
 
@@ -86,9 +92,9 @@ export const UI = (function() {
     });
 
     // Attach event listeners to the manage buttons now located inside the dropdown
-    document.querySelector(selectors.manageCategoriesBtn).addEventListener('click', manageCategories);
-    document.querySelector(selectors.manageStatusesBtn).addEventListener('click', manageStatuses);
-    document.querySelector(selectors.manageFromsBtn).addEventListener('click', manageFroms);
+    document.querySelector(selectors.manageCategoriesBtn).addEventListener('click', () => manageList('categories', 'Manage Categories'));
+    document.querySelector(selectors.manageStatusesBtn).addEventListener('click', () => manageList('statuses', 'Manage Statuses'));
+    document.querySelector(selectors.manageFromsBtn).addEventListener('click', () => manageList('froms', 'Manage "From" Sources'));
     document.querySelector(selectors.clearAllBtn).addEventListener('click', clearAllData); // Event listener for clear all
 
     // Filter section toggle
@@ -211,64 +217,209 @@ export const UI = (function() {
     sel.innerHTML = '<option value="__all">All</option>' + statuses.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('\n');
   }
 
-  async function manageCategories() {
-    const text = await createModal('Edit categories (comma separated)', `<textarea>${categories.join(', ')}</textarea>`);
-    if (text === null) return;
-    categories = text.split(',').map(s => s.trim()).filter(Boolean);
-    if (categories.length === 0) categories = ['General'];
-    await DB.putMeta('categories', categories);
-    renderCategoryOptions();
-    renderTaskList();
-  }
+  // Generic function to manage lists (categories, statuses, froms) using a tag-like modal
+  async function manageList(type, title) {
+    let currentList;
+    let defaultList = [];
+    let putMetaKey;
 
-  async function manageStatuses() {
-    const allTasks = await DB.getAllTasks();
-    const text = await createModal('Edit statuses (comma separated)', `<textarea>${statuses.join(', ')}</textarea>`);
-    if (text === null) return;
-    
-    let newStatuses = text.split(',').map(s => s.trim()).filter(Boolean);
-
-    // Get a list of statuses that are currently in use by tasks
-    const usedStatuses = new Set(allTasks.map(t => t.status));
-
-    // Check if the user is trying to delete an in-use status
-    for (const status of statuses) {
-      if (!newStatuses.includes(status) && usedStatuses.has(status)) {
-        // Use a custom alert since window.alert is not available
-        showModalAlert(`Cannot delete status "${status}" because it is currently in use.`);
-        return; // Exit without saving changes
-      }
+    if (type === 'categories') {
+      currentList = [...categories];
+      defaultList = ['General'];
+      putMetaKey = 'categories';
+    } else if (type === 'statuses') {
+      currentList = [...statuses];
+      defaultList = ['todo', 'in-progress', 'done'];
+      putMetaKey = 'statuses';
+    } else if (type === 'froms') {
+      currentList = [...froms];
+      defaultList = ['Work', 'Personal', 'Shopping'];
+      putMetaKey = 'froms';
+    } else {
+      console.error('Unknown list type:', type);
+      return;
     }
-    
-    if (newStatuses.length === 0) newStatuses = ['todo', 'in-progress', 'done'];
-    statuses = newStatuses;
-    await DB.putMeta('statuses', statuses);
-    renderStatusOptions();
-    renderTaskList();
-  }
 
-  async function manageFroms() {
-    const text = await createModal('Edit "From" sources (comma separated)', `<textarea>${froms.join(', ')}</textarea>`);
-    if (text === null) return;
-    froms = text.split(',').map(s => s.trim()).filter(Boolean);
-    if (froms.length === 0) froms = ['Work', 'Personal', 'Shopping'];
-    await DB.putMeta('froms', froms);
-    renderTaskList();
-  }
-  
-  // Custom alert modal
-  function showModalAlert(message) {
+    // Modal HTML structure for list management
+    const contentHtml = `
+      <div class="list-manager-container">
+        <div class="tag-list-modal" id="listManagerTags"></div>
+        <div style="display:flex; gap:8px; margin-top: 12px;">
+          <input type="text" id="listManagerInput" placeholder="Add new ${type.slice(0, -1) || 'item'}..." class="flex-grow">
+          <button id="listManagerAddBtn">Add</button>
+        </div>
+      </div>
+    `;
+
+    // Create the modal and get a reference to its backdrop for dynamic content
+    const modalPromise = new Promise(async (resolve) => {
       const tmpl = document.getElementById('modal-template').content;
       const modalFragment = tmpl.cloneNode(true);
       const modalBackdrop = modalFragment.querySelector('.modal-backdrop');
 
-      modalFragment.querySelector('h3').textContent = 'Warning';
+      modalFragment.querySelector('h3').textContent = title;
+      modalFragment.querySelector('.modal-body').innerHTML = contentHtml;
+
+      const saveBtn = modalFragment.querySelector('.modal-save');
+      const cancelBtn = modalFragment.querySelector('.modal-cancel');
+      const closeBtn = modalFragment.querySelector('.modal-close');
+
+      let tempList = [...currentList]; // Temporary list for edits
+
+      const listManagerTags = modalBackdrop.querySelector('#listManagerTags');
+      const listManagerInput = modalBackdrop.querySelector('#listManagerInput');
+      const listManagerAddBtn = modalBackdrop.querySelector('#listManagerAddBtn');
+
+      // Function to render tags inside the modal
+      const renderModalTags = () => {
+        listManagerTags.innerHTML = '';
+        tempList.forEach((item, idx) => {
+          const tag = document.createElement('div');
+          tag.className = 'tag selected';
+          tag.innerHTML = `${escapeHtml(item)}<button data-idx="${idx}">x</button>`;
+          listManagerTags.appendChild(tag);
+        });
+
+        // Add event listeners for remove buttons
+        listManagerTags.querySelectorAll('.tag button').forEach(button => {
+          button.addEventListener('click', async (e) => {
+            const idxToRemove = parseInt(e.target.dataset.idx);
+            const itemToRemove = tempList[idxToRemove];
+            const allTasks = await DB.getAllTasks(); // Fetch all tasks inside the event listener
+
+            let isInUse = false;
+            if (type === 'categories') {
+              isInUse = allTasks.some(task => task.categories && task.categories.includes(itemToRemove));
+              if (isInUse) {
+                showModalAlert(`Cannot delete category "${itemToRemove}" because it is currently assigned to one or more tasks.`);
+              }
+            } else if (type === 'statuses') {
+              isInUse = allTasks.some(task => task.status === itemToRemove);
+              if (isInUse) {
+                showModalAlert(`Cannot delete status "${itemToRemove}" because it is currently in use by one or more tasks.`);
+              }
+            } else if (type === 'froms') {
+              isInUse = allTasks.some(task => task.from === itemToRemove);
+              if (isInUse) {
+                showModalAlert(`Cannot delete "From" source "${itemToRemove}" because it is currently used by one or more tasks.`);
+              }
+            }
+            
+            if (isInUse) {
+              return; // Prevent deletion if in use
+            }
+
+            tempList.splice(idxToRemove, 1);
+            renderModalTags();
+          });
+        });
+      };
+
+      // Initial render of tags
+      renderModalTags();
+
+      // Add item functionality
+      listManagerAddBtn.addEventListener('click', () => {
+        const newItem = listManagerInput.value.trim();
+        if (newItem && !tempList.includes(newItem)) {
+          tempList.push(newItem);
+          listManagerInput.value = '';
+          renderModalTags();
+        } else if (newItem && tempList.includes(newItem)) {
+          showModalAlert(`"${newItem}" already exists in the list.`);
+        }
+      });
+
+      // Allow adding by pressing Enter in the input field
+      listManagerInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          listManagerAddBtn.click();
+        }
+      });
+
+      saveBtn.addEventListener('click', () => {
+        document.body.removeChild(modalBackdrop);
+        resolve(tempList); // Resolve with the modified list
+      });
+      cancelBtn.addEventListener('click', () => {
+        document.body.removeChild(modalBackdrop);
+        resolve(null); // Resolve with null on cancel
+      });
+      closeBtn.addEventListener('click', () => {
+        document.body.removeChild(modalBackdrop);
+        resolve(null); // Resolve with null on close
+      });
+      document.body.appendChild(modalFragment);
+    });
+
+    const resultList = await modalPromise; // Wait for the modal to resolve
+
+    if (resultList !== null) { // If not cancelled
+      let finalUpdateList = resultList;
+      // Prevent saving an empty list; revert to default if empty
+      if (resultList.length === 0) {
+        showModalAlert(`List for ${type} cannot be empty. Reverting to default values.`);
+        finalUpdateList = defaultList;
+      }
+
+      if (type === 'categories') {
+        categories = finalUpdateList;
+      } else if (type === 'statuses') {
+        statuses = finalUpdateList;
+      } else if (type === 'froms') {
+        froms = finalUpdateList;
+      }
+      await DB.putMeta(putMetaKey, finalUpdateList);
+      renderCategoryOptions(); // Re-render filter options if categories or statuses changed
+      renderStatusOptions();
+      await renderTaskList(); // Re-render task list to reflect changes
+    }
+  }
+
+
+  async function manageCategories() {
+    // This function is now just a wrapper for the generic manageList
+    // The actual logic is moved to manageList
+  }
+
+  async function manageStatuses() {
+    // This function is now just a wrapper for the generic manageList
+    // The actual logic is moved to manageList
+  }
+
+  async function manageFroms() {
+    // This function is now just a wrapper for the generic manageList
+    // The actual logic is moved to manageList
+  }
+  
+  // Custom alert modal (now uses createModal internally)
+  function showModalAlert(message) {
+      createModal('Warning', `<p>${escapeHtml(message)}</p>`, false); // Pass false for showSaveButton
+  }
+
+  // Custom confirmation modal (now uses createModal internally with specific button texts)
+  function showModalAlertConfirm(message, resolve) {
+      const tmpl = document.getElementById('modal-template').content;
+      const modalFragment = tmpl.cloneNode(true);
+      const modalBackdrop = modalFragment.querySelector('.modal-backdrop');
+
+      modalFragment.querySelector('h3').textContent = 'Confirm';
       modalFragment.querySelector('.modal-body').innerHTML = `<p>${escapeHtml(message)}</p>`;
-      modalFragment.querySelector('.modal-footer').innerHTML = `<button class="modal-save">OK</button>`;
+      modalFragment.querySelector('.modal-footer').innerHTML = `
+          <button class="modal-cancel">Cancel</button>
+          <button class="modal-save danger">Confirm</button>
+      `;
       
       const saveBtn = modalFragment.querySelector('.modal-save');
+      const cancelBtn = modalFragment.querySelector('.modal-cancel');
+
       saveBtn.addEventListener('click', () => {
           document.body.removeChild(modalBackdrop);
+          resolve(true);
+      });
+      cancelBtn.addEventListener('click', () => {
+          document.body.removeChild(modalBackdrop);
+          resolve(false);
       });
       document.body.appendChild(modalFragment);
   }
@@ -276,28 +427,7 @@ export const UI = (function() {
   // New function to clear all persisted data
   async function clearAllData() {
     const confirmed = await new Promise(resolve => {
-        const tmpl = document.getElementById('modal-template').content;
-        const modalFragment = tmpl.cloneNode(true);
-        const modalBackdrop = modalFragment.querySelector('.modal-backdrop');
-
-        modalFragment.querySelector('h3').textContent = 'Clear All Data';
-        modalFragment.querySelector('.modal-body').innerHTML = '<p>Are you sure you want to clear ALL persisted data (tasks, categories, statuses, settings)? This action cannot be undone.</p>';
-        modalFragment.querySelector('.modal-footer').innerHTML = `
-            <button class="modal-cancel">Cancel</button>
-            <button class="modal-save danger">Clear All</button>
-        `;
-        const saveBtn = modalFragment.querySelector('.modal-save');
-        const cancelBtn = modalFragment.querySelector('.modal-cancel');
-        
-        saveBtn.addEventListener('click', () => {
-            document.body.removeChild(modalBackdrop);
-            resolve(true);
-        });
-        cancelBtn.addEventListener('click', () => {
-            document.body.removeChild(modalBackdrop);
-            resolve(false);
-        });
-        document.body.appendChild(modalFragment);
+        showModalAlertConfirm('Are you sure you want to clear ALL persisted data (tasks, categories, statuses, settings)? This action cannot be undone.', resolve);
     });
 
     if (confirmed) {
@@ -576,34 +706,6 @@ export const UI = (function() {
       showModalAlert('Error importing file.');
     }
   }
-
-  // Custom confirmation modal
-  function showModalAlertConfirm(message, resolve) {
-      const tmpl = document.getElementById('modal-template').content;
-      const modalFragment = tmpl.cloneNode(true);
-      const modalBackdrop = modalFragment.querySelector('.modal-backdrop');
-
-      modalFragment.querySelector('h3').textContent = 'Confirm';
-      modalFragment.querySelector('.modal-body').innerHTML = `<p>${escapeHtml(message)}</p>`;
-      modalFragment.querySelector('.modal-footer').innerHTML = `
-          <button class="modal-cancel">Cancel</button>
-          <button class="modal-save danger">Confirm</button>
-      `;
-      
-      const saveBtn = modalFragment.querySelector('.modal-save');
-      const cancelBtn = modalFragment.querySelector('.modal-cancel');
-
-      saveBtn.addEventListener('click', () => {
-          document.body.removeChild(modalBackdrop);
-          resolve(true);
-      });
-      cancelBtn.addEventListener('click', () => {
-          document.body.removeChild(modalBackdrop);
-          resolve(false);
-      });
-      document.body.appendChild(modalFragment);
-  }
-
 
   return {init};
 })();
