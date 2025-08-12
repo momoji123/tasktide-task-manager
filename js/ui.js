@@ -4,7 +4,13 @@ import {Editor} from './editor.js';
 export const UI = (function() {
   const selectors = {
     newTaskBtn: '#newTaskBtn', searchInput: '#searchInput', taskList: '#taskList', editorArea: '#editorArea',
-    filterCategory: '#filterCategory', filterStatus: '#filterStatus', sortBy: '#sortBy',
+    // Updated selectors for multi-select category filter
+    filterCategoryMultiSelect: '#filterCategoryMultiSelect',
+    filterCategoryHeader: '#filterCategoryMultiSelect .multi-select-header',
+    selectedFilterCategoriesDisplay: '#selectedFilterCategoriesDisplay',
+    filterCategoryDropdownContent: '#filterCategoryDropdownContent',
+
+    filterStatus: '#filterStatus', sortBy: '#sortBy',
     // Updated date range selectors
     createdRangeFrom: '#createdRangeFrom', createdRangeTo: '#createdRangeTo',
     updatedRangeFrom: '#updatedRangeFrom', updatedRangeTo: '#updatedRangeTo',
@@ -22,6 +28,7 @@ export const UI = (function() {
   let statuses = [];
   let froms = [];
   let filterSectionVisible = true; // Default state for filter section visibility
+  let selectedFilterCategories = []; // New state for multi-select categories filter
 
   // Helper function for creating a modal
   function createModal(title, contentHtml, showSaveButton = true) {
@@ -72,9 +79,11 @@ export const UI = (function() {
     froms = (await DB.getMeta('froms')) || ['Work', 'Personal', 'Shopping'];
     // Load filter section visibility state
     filterSectionVisible = (await DB.getMeta('filterSectionVisible')) ?? true;
+    // Load selected filter categories
+    selectedFilterCategories = (await DB.getMeta('selectedFilterCategories')) || [];
 
 
-    renderCategoryOptions();
+    renderFilterCategoriesMultiSelect(); // Render the new multi-select category filter
     renderStatusOptions();
 
     document.querySelector(selectors.newTaskBtn).addEventListener('click', () => openTaskEditor(createEmptyTask()));
@@ -90,7 +99,7 @@ export const UI = (function() {
 
     // Close the dropdown if the user clicks outside of it
     window.addEventListener('click', (event) => {
-        if (!event.target.matches(selectors.settingsBtn) && settingsDropdown.classList.contains('show')) {
+        if (!event.target.matches(selectors.settingsBtn) && !event.target.closest(selectors.filterCategoryMultiSelect) && settingsDropdown.classList.contains('show')) {
             settingsDropdown.classList.remove('show');
         }
     });
@@ -114,7 +123,6 @@ export const UI = (function() {
     // Apply initial visibility state
     filterSection.classList.toggle('show', filterSectionVisible);
 
-
     document.querySelector(selectors.exportBtn).addEventListener('click', exportJSON);
     document.querySelector(selectors.importBtn).addEventListener('click', () => document.querySelector(selectors.importFile).click());
     document.querySelector(selectors.importFile).addEventListener('change', importJSON);
@@ -132,11 +140,24 @@ export const UI = (function() {
 
     document.querySelector(selectors.searchInput).addEventListener('input', renderTaskList);
     document.querySelector(selectors.sortBy).addEventListener('change', renderTaskList);
-    document.querySelector(selectors.filterCategory).addEventListener('change', renderTaskList);
+    // document.querySelector(selectors.filterCategory).addEventListener('change', renderTaskList); // Removed for multi-select
     document.querySelector(selectors.filterStatus).addEventListener('change', renderTaskList);
-    // Removed rangeFrom and rangeTo listeners as they are now createdRangeFrom/To
-    // document.querySelector(selectors.rangeFrom).addEventListener('change', renderTaskList);
-    // document.querySelector(selectors.rangeTo).addEventListener('change', renderTaskList);
+    
+    // Multi-select Category Filter Event Listeners
+    const filterCategoryHeader = document.querySelector(selectors.filterCategoryHeader);
+    const filterCategoryDropdownContent = document.querySelector(selectors.filterCategoryDropdownContent);
+
+    filterCategoryHeader.addEventListener('click', (event) => {
+      filterCategoryDropdownContent.classList.toggle('show');
+      event.stopPropagation(); // Prevent closing immediately
+    });
+
+    // Close multi-select dropdown if clicked outside
+    window.addEventListener('click', (event) => {
+      if (!event.target.closest(selectors.filterCategoryMultiSelect) && filterCategoryDropdownContent.classList.contains('show')) {
+        filterCategoryDropdownContent.classList.remove('show');
+      }
+    });
 
     await renderTaskList();
   }
@@ -165,7 +186,6 @@ export const UI = (function() {
     container.innerHTML = '';
     const tasks = await DB.getAllTasks();
     const q = document.querySelector(selectors.searchInput).value.toLowerCase();
-    const filterCat = document.querySelector(selectors.filterCategory).value;
     const filterStat = document.querySelector(selectors.filterStatus).value;
     const sortVal = document.querySelector(selectors.sortBy).value;
 
@@ -183,8 +203,14 @@ export const UI = (function() {
     let filtered = tasks.filter(t => {
       // Search filter
       if (q && !(t.title?.toLowerCase().includes(q) || t.from?.toLowerCase().includes(q) || t.notes?.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q))) return false;
-      // Category filter
-      if (filterCat !== '__all' && !t.categories.includes(filterCat)) return false;
+      
+      // Category filter (multi-select)
+      // If selectedFilterCategories is empty, it means "select all" (no filter applied)
+      if (selectedFilterCategories.length > 0) {
+          const taskHasSelectedCategory = t.categories.some(cat => selectedFilterCategories.includes(cat));
+          if (!taskHasSelectedCategory) return false;
+      }
+
       // Status filter
       if (filterStat !== '__all' && t.status !== filterStat) return false;
       
@@ -254,10 +280,61 @@ export const UI = (function() {
     });
   }
 
-  function renderCategoryOptions() {
-    const sel = document.querySelector(selectors.filterCategory);
-    sel.innerHTML = '<option value="__all">All</option>' + categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('\n');
+  // New function to render the multi-select category filter UI
+  async function renderFilterCategoriesMultiSelect() {
+    const selectedDisplay = document.querySelector(selectors.selectedFilterCategoriesDisplay);
+    const dropdownContent = document.querySelector(selectors.filterCategoryDropdownContent);
+
+    selectedDisplay.innerHTML = ''; // Clear current selected tags
+    dropdownContent.innerHTML = ''; // Clear current dropdown items
+
+    // Render selected categories as tags in the header
+    if (selectedFilterCategories.length === 0) {
+      selectedDisplay.innerHTML = '<span class="placeholder-text">All Categories</span>';
+    } else {
+      selectedFilterCategories.forEach((cat, idx) => {
+        const tag = document.createElement('div');
+        tag.className = 'selected-tag';
+        tag.innerHTML = `${escapeHtml(cat)}<button data-cat="${escapeHtml(cat)}">x</button>`;
+        tag.querySelector('button').addEventListener('click', (e) => {
+          e.stopPropagation(); // Prevent dropdown from closing
+          const categoryToRemove = e.target.dataset.cat;
+          selectedFilterCategories = selectedFilterCategories.filter(c => c !== categoryToRemove);
+          DB.putMeta('selectedFilterCategories', selectedFilterCategories); // Persist
+          renderFilterCategoriesMultiSelect();
+          renderTaskList();
+        });
+        selectedDisplay.appendChild(tag);
+      });
+    }
+
+    // Render all categories in the dropdown content
+    categories.forEach(cat => {
+      const item = document.createElement('div');
+      item.className = 'dropdown-item';
+      item.textContent = escapeHtml(cat);
+      if (selectedFilterCategories.includes(cat)) {
+        item.classList.add('selected');
+      }
+
+      item.addEventListener('click', (e) => {
+        e.stopPropagation(); // Prevent dropdown from closing immediately on item click
+
+        if (selectedFilterCategories.includes(cat)) {
+          // Remove if already selected
+          selectedFilterCategories = selectedFilterCategories.filter(c => c !== cat);
+        } else {
+          // Add if not selected
+          selectedFilterCategories.push(cat);
+        }
+        DB.putMeta('selectedFilterCategories', selectedFilterCategories); // Persist
+        renderFilterCategoriesMultiSelect(); // Re-render this filter UI
+        renderTaskList(); // Re-render task list based on new filter
+      });
+      dropdownContent.appendChild(item);
+    });
   }
+
 
   function renderStatusOptions() {
     const sel = document.querySelector(selectors.filterStatus);
@@ -409,34 +486,22 @@ export const UI = (function() {
         finalUpdateList = defaultList;
       }
 
+      // Update the main categories/statuses/froms array
       if (type === 'categories') {
         categories = finalUpdateList;
+        // Also update selectedFilterCategories if a category was removed
+        selectedFilterCategories = selectedFilterCategories.filter(cat => categories.includes(cat));
+        await DB.putMeta('selectedFilterCategories', selectedFilterCategories);
+        renderFilterCategoriesMultiSelect(); // Re-render the multi-select filter
       } else if (type === 'statuses') {
         statuses = finalUpdateList;
       } else if (type === 'froms') {
         froms = finalUpdateList;
       }
       await DB.putMeta(putMetaKey, finalUpdateList);
-      renderCategoryOptions(); // Re-render filter options if categories or statuses changed
-      renderStatusOptions();
+      renderStatusOptions(); // Re-render filter options if categories or statuses changed (only statuses are select)
       await renderTaskList(); // Re-render task list to reflect changes
     }
-  }
-
-
-  async function manageCategories() {
-    // This function is now just a wrapper for the generic manageList
-    // The actual logic is moved to manageList
-  }
-
-  async function manageStatuses() {
-    // This function is now just a wrapper for the generic manageList
-    // The actual logic is moved to manageList
-  }
-
-  async function manageFroms() {
-    // This function is now just a wrapper for the generic manageList
-    // The actual logic is moved to manageList
   }
   
   // Custom alert modal (now uses createModal internally)
@@ -745,7 +810,7 @@ export const UI = (function() {
       await DB.putMeta('statuses', statuses);
       await DB.putMeta('froms', froms);
       
-      renderCategoryOptions();
+      renderFilterCategoriesMultiSelect(); // Re-render the multi-select filter
       renderStatusOptions();
       await renderTaskList();
     } catch (e) {

@@ -116,6 +116,11 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial}
   padding: 8px;
 }
 
+.modal-body {
+  max-height: 400px; /* Added: Maximum height for modal body */
+  overflow-y: auto; /* Added: Enable vertical scrolling if content overflows */
+}
+
 .modal-footer {
   display: flex;
   justify-content: flex-end;
@@ -183,4 +188,124 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial}
 
 .filters-collapsible.show {
   display: block; /* Shown when 'show' class is present */
+}
+
+/* Style for the date inputs to make them align nicely */
+.date-inputs {
+  display: flex;
+  gap: 8px;
+}
+.date-inputs input {
+  flex: 1;
+}
+
+/* Style for task item dates to stack or flow */
+.task-item .right .date-info {
+  font-size: 11px; /* Smaller font for dates */
+  color: var(--muted);
+  text-align: right;
+  margin-top: 2px;
+}
+.task-item .right .date-info span {
+  display: block; /* Stack dates for clarity in list view */
+}
+/* Specific styles for filter date ranges to be inline */
+.filter-date-group {
+  display: flex;
+  flex-direction: column; /* Stack label and input group */
+  gap: 4px; /* Space between label and inputs */
+  margin-bottom: 8px; /* Space between date groups */
+}
+.filter-date-group .date-inputs-inline {
+  display: flex;
+  gap: 8px; /* Space between from and to inputs */
+}
+.filter-date-group .date-inputs-inline input {
+  flex: 1; /* Make inputs take equal space */
+}
+
+/* New styles for multi-select category filter */
+.multi-select-dropdown {
+    position: relative;
+    width: 100%;
+}
+
+.multi-select-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid #e2e6ef;
+    background-color: white;
+    cursor: pointer;
+    min-height: 34px; /* Ensure consistent height */
+}
+
+.multi-select-header .selected-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    flex-grow: 1;
+}
+
+.multi-select-header .selected-tag {
+    background-color: var(--accent);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.multi-select-header .selected-tag button {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 10px;
+    padding: 0;
+    line-height: 1;
+}
+
+.multi-select-dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: #f9f9f9;
+    min-width: 100%;
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+    z-index: 1002; /* Higher than settings dropdown */
+    border-radius: 6px;
+    overflow: hidden;
+    margin-top: 4px;
+    max-height: 200px; /* Limit height for scroll */
+    overflow-y: auto;
+}
+
+.multi-select-dropdown-content.show {
+    display: block;
+}
+
+.multi-select-dropdown-content .dropdown-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.multi-select-dropdown-content .dropdown-item:hover {
+    background-color: #f1f1f1;
+}
+
+.multi-select-dropdown-content .dropdown-item.selected {
+    background-color: #eef2ff; /* Light accent for selected items */
+    font-weight: 600;
+    color: var(--accent);
+}
+
+.placeholder-text {
+    color: var(--muted);
 }

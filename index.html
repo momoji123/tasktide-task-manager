@@ -138,7 +138,20 @@
           </div>
 
           <label>Category</label>
-          <select id="filterCategory"><option value="__all">All</option></select>
+          <!-- Multi-select Category Filter -->
+          <div id="filterCategoryMultiSelect" class="multi-select-dropdown">
+            <div class="multi-select-header">
+              <div class="selected-tags" id="selectedFilterCategoriesDisplay">
+                <!-- Selected categories will be rendered here as tags -->
+                <span class="placeholder-text">All Categories</span>
+              </div>
+              <span class="dropdown-arrow">&#9660;</span> <!-- Dropdown arrow -->
+            </div>
+            <div id="filterCategoryDropdownContent" class="multi-select-dropdown-content">
+              <!-- All categories will be rendered here as clickable items -->
+            </div>
+          </div>
+          
           <label>Status</label>
           <select id="filterStatus"><option value="__all">All</option></select>
           <label>Sort by</label>
