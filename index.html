@@ -5,6 +5,46 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>TaskTide — Pure HTML/CSS/JS</title>
   <link rel="stylesheet" href="css/style.css">
+  <style>
+    /* Basic styling for the dropdown menu */
+    .dropdown {
+      position: relative;
+      display: inline-block;
+    }
+
+    .dropdown-content {
+      display: none;
+      position: absolute;
+      background-color: #f9f9f9;
+      min-width: 160px;
+      box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+      z-index: 1;
+      right: 0; /* Align to the right of the parent */
+      border-radius: 6px;
+      overflow: hidden; /* Ensures rounded corners on children */
+    }
+
+    .dropdown-content button {
+      color: black;
+      padding: 12px 16px;
+      text-decoration: none;
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-radius: 0; /* Reset border-radius for individual buttons within dropdown */
+    }
+
+    .dropdown-content button:hover {
+      background-color: #f1f1f1;
+    }
+
+    .dropdown-content.show {
+      display: block;
+    }
+  </style>
 </head>
 <body>
   <div id="app" class="app">
@@ -28,9 +68,10 @@
           <option value="priority">Priority</option>
           <option value="from">From</option>
         </select>
-        <button id="manageCategoriesBtn" class="manage-btn">Manage Categories</button>
+        <!-- These buttons are now part of a dropdown menu in the header -->
+        <!-- <button id="manageCategoriesBtn" class="manage-btn">Manage Categories</button>
         <button id="manageStatusesBtn" class="manage-btn">Manage Statuses</button>
-        <button id="manageFromsBtn" class="manage-btn">Manage Froms</button>
+        <button id="manageFromsBtn" class="manage-btn">Manage Froms</button> -->
       </section>
       <section id="taskList" class="task-list"></section>
     </aside>
@@ -42,6 +83,15 @@
           <button id="exportBtn">Export JSON</button>
           <button id="importBtn">Import JSON</button>
           <input id="importFile" type="file" accept="application/json" hidden>
+          
+          <div class="dropdown">
+            <button id="settingsBtn" class="dropbtn">Settings</button>
+            <div id="settingsDropdown" class="dropdown-content">
+              <button id="manageCategoriesBtn">Manage Categories</button>
+              <button id="manageStatusesBtn">Manage Statuses</button>
+              <button id="manageFromsBtn">Manage Froms</button>
+            </div>
+          </div>
         </div>
       </header>
 

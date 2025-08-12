@@ -4,7 +4,11 @@ import {Editor} from './editor.js';
 export const UI = (function() {
   const selectors = {
     newTaskBtn: '#newTaskBtn', searchInput: '#searchInput', taskList: '#taskList', editorArea: '#editorArea',
-    filterCategory: '#filterCategory', filterStatus: '#filterStatus', sortBy: '#sortBy', rangeFrom: '#rangeFrom', rangeTo: '#rangeTo', manageCategoriesBtn: '#manageCategoriesBtn', manageStatusesBtn: '#manageStatusesBtn', manageFromsBtn: '#manageFromsBtn', exportBtn: '#exportBtn', importBtn: '#importBtn', importFile: '#importFile',
+    filterCategory: '#filterCategory', filterStatus: '#filterStatus', sortBy: '#sortBy', rangeFrom: '#rangeFrom', rangeTo: '#rangeTo',
+    // Updated selectors for the new settings menu structure
+    exportBtn: '#exportBtn', importBtn: '#importBtn', importFile: '#importFile',
+    settingsBtn: '#settingsBtn', settingsDropdown: '#settingsDropdown',
+    manageCategoriesBtn: '#manageCategoriesBtn', manageStatusesBtn: '#manageStatusesBtn', manageFromsBtn: '#manageFromsBtn',
   };
 
   let currentTask = null;
@@ -58,9 +62,28 @@ export const UI = (function() {
     renderStatusOptions();
 
     document.querySelector(selectors.newTaskBtn).addEventListener('click', () => openTaskEditor(createEmptyTask()));
+    
+    // Event listener for the new settings button to toggle the dropdown
+    const settingsBtn = document.querySelector(selectors.settingsBtn);
+    const settingsDropdown = document.querySelector(selectors.settingsDropdown);
+
+    settingsBtn.addEventListener('click', (event) => {
+        settingsDropdown.classList.toggle('show');
+        event.stopPropagation(); // Prevent the document click listener from immediately closing it
+    });
+
+    // Close the dropdown if the user clicks outside of it
+    window.addEventListener('click', (event) => {
+        if (!event.target.matches(selectors.settingsBtn) && settingsDropdown.classList.contains('show')) {
+            settingsDropdown.classList.remove('show');
+        }
+    });
+
+    // Attach event listeners to the manage buttons now located inside the dropdown
     document.querySelector(selectors.manageCategoriesBtn).addEventListener('click', manageCategories);
     document.querySelector(selectors.manageStatusesBtn).addEventListener('click', manageStatuses);
     document.querySelector(selectors.manageFromsBtn).addEventListener('click', manageFroms);
+
     document.querySelector(selectors.exportBtn).addEventListener('click', exportJSON);
     document.querySelector(selectors.importBtn).addEventListener('click', () => document.querySelector(selectors.importFile).click());
     document.querySelector(selectors.importFile).addEventListener('change', importJSON);
