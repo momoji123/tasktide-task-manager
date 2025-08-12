@@ -7,16 +7,24 @@ export const DB = (function(){
   function open(){
     return new Promise((resolve,reject)=>{
       if(db) return resolve(db);
-      const r = indexedDB.open(DB_NAME, 1);
+      const r = indexedDB.open(DB_NAME, 2); // Version bump to 2 to trigger onupgradeneeded
       r.onupgradeneeded = e => {
         const idb = e.target.result;
+        // Task store
         if(!idb.objectStoreNames.contains(STORE_TASKS)){
           const tstore = idb.createObjectStore(STORE_TASKS,{keyPath:'id'});
           tstore.createIndex('deadline','deadline',{unique:false});
           tstore.createIndex('updatedAt','updatedAt',{unique:false});
         }
+        // Meta store for custom categories, statuses, etc.
         if(!idb.objectStoreNames.contains(STORE_META)){
           idb.createObjectStore(STORE_META,{keyPath:'key'});
+        }
+
+        // Add 'from' index if it doesn't exist (new in version 2)
+        const tstore = r.transaction.objectStore(STORE_TASKS);
+        if (!tstore.indexNames.contains('from')) {
+          tstore.createIndex('from', 'from', {unique: false});
         }
       };
       r.onsuccess = e => { db = e.target.result; resolve(db); };
@@ -81,11 +89,10 @@ export const DB = (function(){
     const conn = await open();
     return new Promise((res,rej)=>{
       const tx = conn.transaction([STORE_META],'readonly');
-      const req = tx.objectStore(STORE_META).get(key);
-      req.onsuccess = e => res(e.target.result?.value);
-      req.onerror = e => rej(e.target.error);
+      tx.objectStore(STORE_META).get(key).onsuccess = e => res(e.target.result?.value);
+      tx.onerror = e => rej(e.target.error);
     });
   }
 
-  return { putTask, getTask, deleteTask, getAllTasks, putMeta, getMeta };
+  return {putTask,getTask,deleteTask,getAllTasks,putMeta,getMeta};
 })();

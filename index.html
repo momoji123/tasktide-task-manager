@@ -3,16 +3,15 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Task Manager — Pure HTML/CSS/JS</title>
+  <title>TaskTide — Pure HTML/CSS/JS</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <div id="app" class="app">
     <aside class="sidebar">
-      <h1>TasksMaster</h1>
+      <h1>TaskTide</h1>
       <div class="controls">
         <button id="newTaskBtn">+ New Task</button>
-        <!-- Bug fix: Updated placeholder to include description -->
         <input id="searchInput" type="search" placeholder="Search title, from, description, notes...">
       </div>
       <section class="filters">
@@ -21,7 +20,7 @@
         <label>Category</label>
         <select id="filterCategory"><option value="__all">All</option></select>
         <label>Status</label>
-        <select id="filterStatus"><option value="__all">All</option><option>todo</option><option>in-progress</option><option>done</option></select>
+        <select id="filterStatus"><option value="__all">All</option></select>
         <label>Sort by</label>
         <select id="sortBy">
           <option value="updatedAt">Last updated</option>
@@ -29,15 +28,17 @@
           <option value="priority">Priority</option>
           <option value="from">From</option>
         </select>
+        <button id="manageCategoriesBtn" class="manage-btn">Manage Categories</button>
+        <button id="manageStatusesBtn" class="manage-btn">Manage Statuses</button>
+        <button id="manageFromsBtn" class="manage-btn">Manage Froms</button>
       </section>
       <section id="taskList" class="task-list"></section>
     </aside>
 
     <main class="main">
       <header class="main-header">
-        <div class="breadcrumbs">Task Manager • Local</div>
+        <div class="breadcrumbs">TaskTide • Local Task Manager</div>
         <div class="header-actions">
-          <button id="manageCategoriesBtn">Manage categories</button>
           <button id="exportBtn">Export JSON</button>
           <button id="importBtn">Import JSON</button>
           <input id="importFile" type="file" accept="application/json" hidden>
@@ -59,6 +60,23 @@
       <div class="right">
         <div class="priority"></div>
         <div class="deadline"></div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Re-usable modal dialog template -->
+  <template id="modal-template">
+    <div class="modal-backdrop">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3></h3>
+          <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body"></div>
+        <div class="modal-footer">
+          <button class="modal-save">Save</button>
+          <button class="modal-cancel">Cancel</button>
+        </div>
       </div>
     </div>
   </template>

@@ -1,24 +1,68 @@
 import {DB} from './storage.js';
 import {Editor} from './editor.js';
 
-export const UI = (function(){
+export const UI = (function() {
   const selectors = {
-    newTaskBtn: '#newTaskBtn', searchInput:'#searchInput', taskList:'#taskList', editorArea:'#editorArea',
-    filterCategory:'#filterCategory', filterStatus:'#filterStatus', sortBy:'#sortBy', rangeFrom:'#rangeFrom', rangeTo:'#rangeTo', manageCategoriesBtn:'#manageCategoriesBtn', exportBtn:'#exportBtn', importBtn:'#importBtn', importFile:'#importFile'
+    newTaskBtn: '#newTaskBtn', searchInput: '#searchInput', taskList: '#taskList', editorArea: '#editorArea',
+    filterCategory: '#filterCategory', filterStatus: '#filterStatus', sortBy: '#sortBy', rangeFrom: '#rangeFrom', rangeTo: '#rangeTo', manageCategoriesBtn: '#manageCategoriesBtn', manageStatusesBtn: '#manageStatusesBtn', manageFromsBtn: '#manageFromsBtn', exportBtn: '#exportBtn', importBtn: '#importBtn', importFile: '#importFile',
   };
 
   let currentTask = null;
   let categories = [];
+  let statuses = [];
+  let froms = [];
 
-  async function init(){
-    // load categories
+  // Helper function for creating a modal
+  function createModal(title, contentHtml) {
+    const tmpl = document.getElementById('modal-template').content;
+    const modalFragment = tmpl.cloneNode(true);
+    // Get a reference to the actual modal backdrop element BEFORE appending the fragment.
+    // Once appended, the fragment's children become direct children of the body,
+    // and the original 'modalFragment' itself is no longer in the DOM.
+    const modalBackdrop = modalFragment.querySelector('.modal-backdrop');
+
+    modalFragment.querySelector('h3').textContent = title;
+    modalFragment.querySelector('.modal-body').innerHTML = contentHtml;
+    
+    // Add logic to save and close the modal
+    const saveBtn = modalFragment.querySelector('.modal-save');
+    const cancelBtn = modalFragment.querySelector('.modal-cancel');
+    const closeBtn = modalFragment.querySelector('.modal-close');
+
+    return new Promise((resolve) => {
+      saveBtn.addEventListener('click', () => {
+        const textarea = modalBackdrop.querySelector('textarea'); // Use modalBackdrop to query content
+        document.body.removeChild(modalBackdrop); // Remove the direct child
+        resolve(textarea ? textarea.value : null); // Handle cases where textarea might not exist
+      });
+      cancelBtn.addEventListener('click', () => {
+        document.body.removeChild(modalBackdrop); // Remove the direct child
+        resolve(null);
+      });
+      closeBtn.addEventListener('click', () => {
+        document.body.removeChild(modalBackdrop); // Remove the direct child
+        resolve(null);
+      });
+      document.body.appendChild(modalFragment); // Append the fragment, its children become direct body children
+    });
+  }
+
+
+  async function init() {
+    // Load custom options from DB
     categories = (await DB.getMeta('categories')) || ['General'];
-    renderCategoryOptions();
+    statuses = (await DB.getMeta('statuses')) || ['todo', 'in-progress', 'done'];
+    froms = (await DB.getMeta('froms')) || ['Work', 'Personal', 'Shopping'];
 
-    document.querySelector(selectors.newTaskBtn).addEventListener('click', ()=>openTaskEditor(createEmptyTask()));
+    renderCategoryOptions();
+    renderStatusOptions();
+
+    document.querySelector(selectors.newTaskBtn).addEventListener('click', () => openTaskEditor(createEmptyTask()));
     document.querySelector(selectors.manageCategoriesBtn).addEventListener('click', manageCategories);
+    document.querySelector(selectors.manageStatusesBtn).addEventListener('click', manageStatuses);
+    document.querySelector(selectors.manageFromsBtn).addEventListener('click', manageFroms);
     document.querySelector(selectors.exportBtn).addEventListener('click', exportJSON);
-    document.querySelector(selectors.importBtn).addEventListener('click', ()=>document.querySelector(selectors.importFile).click());
+    document.querySelector(selectors.importBtn).addEventListener('click', () => document.querySelector(selectors.importFile).click());
     document.querySelector(selectors.importFile).addEventListener('change', importJSON);
 
     document.querySelector(selectors.searchInput).addEventListener('input', renderTaskList);
@@ -31,68 +75,146 @@ export const UI = (function(){
     await renderTaskList();
   }
 
-  function createEmptyTask(){
+  function createEmptyTask() {
     const id = 't_' + Date.now();
     return {
-      id, title:'Untitled', description:'', notes:'', attachments:[], priority:3, deadline:null, from:'', categories:['General'], status:'todo', createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()
+      id,
+      title: 'Untitled',
+      description: '',
+      notes: '',
+      attachments: [],
+      priority: 3,
+      deadline: null,
+      from: froms[0] || '', // Use the first custom from as default
+      categories: [categories[0] || 'General'], // Use the first custom category as default
+      status: statuses[0] || 'todo', // Use the first custom status as default
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
   }
 
-  async function renderTaskList(){
+  async function renderTaskList() {
     const container = document.querySelector(selectors.taskList);
     container.innerHTML = '';
     const tasks = await DB.getAllTasks();
     const q = document.querySelector(selectors.searchInput).value.toLowerCase();
-    let filtered = tasks.filter(t=>{
-      if(q){ if(!(t.title?.toLowerCase().includes(q) || t.from?.toLowerCase().includes(q) || t.notes?.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q))) return false }
-      const cat = document.querySelector(selectors.filterCategory).value; if(cat!='__all' && !t.categories.includes(cat)) return false;
-      const st = document.querySelector(selectors.filterStatus).value; if(st!='__all' && t.status!==st) return false;
-      const rf = document.querySelector(selectors.rangeFrom).value; const rt = document.querySelector(selectors.rangeTo).value;
-      if((rf || rt) && t.updatedAt){
+    const filterCat = document.querySelector(selectors.filterCategory).value;
+    const filterStat = document.querySelector(selectors.filterStatus).value;
+    const sortVal = document.querySelector(selectors.sortBy).value;
+
+    const rf = document.querySelector(selectors.rangeFrom).value;
+    const rt = document.querySelector(selectors.rangeTo).value;
+
+    let filtered = tasks.filter(t => {
+      // Search filter
+      if (q && !(t.title?.toLowerCase().includes(q) || t.from?.toLowerCase().includes(q) || t.notes?.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q))) return false;
+      // Category filter
+      if (filterCat !== '__all' && !t.categories.includes(filterCat)) return false;
+      // Status filter
+      if (filterStat !== '__all' && t.status !== filterStat) return false;
+      // Date range filter
+      if ((rf || rt) && t.updatedAt) {
         const u = new Date(t.updatedAt);
-        if(rf && u < new Date(rf)) return false;
-        if(rt && u > new Date(rt + 'T23:59:59')) return false;
+        if (rf && u < new Date(rf)) return false;
+        if (rt && u > new Date(rt + 'T23:59:59')) return false;
       }
       return true;
     });
 
-    const sort = document.querySelector(selectors.sortBy).value;
-    filtered.sort((a,b)=>{
-      if(sort==='deadline') return (a.deadline||'').localeCompare(b.deadline||'');
-      if(sort==='priority') return a.priority - b.priority;
-      if(sort==='from') return (a.from||'').localeCompare(b.from||'');
-      return (b.updatedAt||'').localeCompare(a.updatedAt||'');
+    filtered.sort((a, b) => {
+      if (sortVal === 'deadline') return (a.deadline || '').localeCompare(b.deadline || '');
+      if (sortVal === 'priority') return a.priority - b.priority;
+      if (sortVal === 'from') return (a.from || '').localeCompare(b.from || '');
+      return (b.updatedAt || '').localeCompare(a.updatedAt || '');
     });
 
     const tmpl = document.getElementById('task-item-template').content;
-    filtered.forEach(t=>{
+    filtered.forEach(t => {
       const node = tmpl.cloneNode(true);
       const el = node.querySelector('.task-item');
       el.querySelector('.title').textContent = t.title || '(no title)';
-      el.querySelector('.meta').textContent = `${t.from||'—'} • ${t.categories.join(', ')} • ${t.status}`;
-      el.querySelector('.priority').textContent = ['!','!!','!!!'][Math.max(0,3 - t.priority)] || t.priority;
+      el.querySelector('.meta').textContent = `${t.from || '—'} • ${t.categories.join(', ')} • ${t.status}`;
+      el.querySelector('.priority').textContent = ['!', '!!', '!!!'][Math.max(0, 3 - t.priority)] || t.priority;
       el.querySelector('.deadline').textContent = t.deadline ? new Date(t.deadline).toLocaleDateString() : '';
-      el.addEventListener('click', ()=>openTaskEditor(t));
+      el.addEventListener('click', () => openTaskEditor(t));
       container.appendChild(node);
     });
   }
 
-  function renderCategoryOptions(){
+  function renderCategoryOptions() {
     const sel = document.querySelector(selectors.filterCategory);
-    sel.innerHTML = '<option value="__all">All</option>' + categories.map(c=>`<option value="${c}">${c}</option>`).join('\n');
+    sel.innerHTML = '<option value="__all">All</option>' + categories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('\n');
   }
 
-  async function manageCategories(){
-    const text = prompt('Edit categories (comma separated)', categories.join(','));
-    if(text==null) return;
-    categories = text.split(',').map(s=>s.trim()).filter(Boolean);
-    if(categories.length===0) categories = ['General'];
+  function renderStatusOptions() {
+    const sel = document.querySelector(selectors.filterStatus);
+    sel.innerHTML = '<option value="__all">All</option>' + statuses.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('\n');
+  }
+
+  async function manageCategories() {
+    const text = await createModal('Edit categories (comma separated)', `<textarea>${categories.join(', ')}</textarea>`);
+    if (text === null) return;
+    categories = text.split(',').map(s => s.trim()).filter(Boolean);
+    if (categories.length === 0) categories = ['General'];
     await DB.putMeta('categories', categories);
     renderCategoryOptions();
     renderTaskList();
   }
 
-  async function openTaskEditor(task){
+  async function manageStatuses() {
+    const allTasks = await DB.getAllTasks();
+    const text = await createModal('Edit statuses (comma separated)', `<textarea>${statuses.join(', ')}</textarea>`);
+    if (text === null) return;
+    
+    let newStatuses = text.split(',').map(s => s.trim()).filter(Boolean);
+
+    // Get a list of statuses that are currently in use by tasks
+    const usedStatuses = new Set(allTasks.map(t => t.status));
+
+    // Check if the user is trying to delete an in-use status
+    for (const status of statuses) {
+      if (!newStatuses.includes(status) && usedStatuses.has(status)) {
+        // Use a custom alert since window.alert is not available
+        showModalAlert(`Cannot delete status "${status}" because it is currently in use.`);
+        return; // Exit without saving changes
+      }
+    }
+    
+    if (newStatuses.length === 0) newStatuses = ['todo', 'in-progress', 'done'];
+    statuses = newStatuses;
+    await DB.putMeta('statuses', statuses);
+    renderStatusOptions();
+    renderTaskList();
+  }
+
+  async function manageFroms() {
+    const text = await createModal('Edit "From" sources (comma separated)', `<textarea>${froms.join(', ')}</textarea>`);
+    if (text === null) return;
+    froms = text.split(',').map(s => s.trim()).filter(Boolean);
+    if (froms.length === 0) froms = ['Work', 'Personal', 'Shopping'];
+    await DB.putMeta('froms', froms);
+    renderTaskList();
+  }
+  
+  // Custom alert modal
+  function showModalAlert(message) {
+      const tmpl = document.getElementById('modal-template').content;
+      const modalFragment = tmpl.cloneNode(true);
+      const modalBackdrop = modalFragment.querySelector('.modal-backdrop');
+
+      modalFragment.querySelector('h3').textContent = 'Warning';
+      modalFragment.querySelector('.modal-body').innerHTML = `<p>${escapeHtml(message)}</p>`;
+      modalFragment.querySelector('.modal-footer').innerHTML = `<button class="modal-save">OK</button>`;
+      
+      const saveBtn = modalFragment.querySelector('.modal-save');
+      saveBtn.addEventListener('click', () => {
+          document.body.removeChild(modalBackdrop);
+      });
+      document.body.appendChild(modalFragment);
+  }
+
+
+  async function openTaskEditor(task) {
     currentTask = task;
     const area = document.querySelector(selectors.editorArea);
     area.innerHTML = `
@@ -101,29 +223,29 @@ export const UI = (function(){
           <div class="label">Title</div>
           <input id="taskTitle" value="${escapeHtml(task.title)}">
           <div class="label">From</div>
-          <input id="taskFrom" value="${escapeHtml(task.from)}">
+          <select id="taskFrom">${froms.map(f=>`<option value="${escapeHtml(f)}" ${f === task.from ? 'selected':''}>${escapeHtml(f)}</option>`).join('')}</select>
           <div class="label">Priority (1-high,5-low)</div>
           <input id="taskPriority" type="number" min="1" max="5" value="${task.priority}">
           <div class="label">Deadline</div>
           <input id="taskDeadline" type="date" value="${task.deadline ? task.deadline.split('T')[0]:''}">
-
+          <div class="label">Status</div>
+          <select id="statusSelect">${statuses.map(s=>`<option value="${escapeHtml(s)}" ${s === task.status ? 'selected':''}>${escapeHtml(s)}</option>`).join('')}</select>
           <div class="label">Description</div>
           <div id="descEditor" class="card"></div>
-
           <div class="label">Notes</div>
           <div id="notesEditor" class="card"></div>
-
           <div style="margin-top:8px;display:flex;gap:8px">
             <button id="saveBtn">Save</button>
             <button id="deleteBtn">Delete</button>
-            <select id="statusSelect"><option value="todo">todo</option><option value="in-progress">in-progress</option><option value="done">done</option></select>
           </div>
         </div>
-
         <aside class="card">
           <div class="label">Categories</div>
           <div id="categoryList"></div>
-          <div style="margin-top:8px"><input id="newCategoryInput" placeholder="New category"><button id="addCategoryBtn">Add</button></div>
+          <div style="margin-top:8px">
+            <select id="newCategorySelect" class="w-full"></select>
+            <button id="addCategoryBtn">Add</button>
+          </div>
           <div class="label">Attachments</div>
           <div id="attachments" class="attach-list"></div>
         </aside>
@@ -137,74 +259,151 @@ export const UI = (function(){
       if (!currentTask.attachments) {
         currentTask.attachments = [];
       }
-      // Add the new attachment to the current task's data.
+      // Add the new attachment to the current task's attachments array.
       currentTask.attachments.push(attachment);
-      // Re-render the attachments list to show the newly added file.
+      // Re-render the attachments section to show the new file.
       renderAttachments(currentTask);
+      // Automatically save the task with the new attachment.
+      saveTask();
     };
 
-    // Initialize the rich text editors, passing the attachment handler.
-    const desc = Editor.init(document.getElementById('descEditor'), { onAttach: handleAttachment });
-    const notes = Editor.init(document.getElementById('notesEditor'), { onAttach: handleAttachment });
-    desc.setHTML(task.description || '');
-    notes.setHTML(task.notes || '');
+    Editor.init(area.querySelector('#descEditor'), { onAttach: handleAttachment });
+    area.querySelector('#descEditor .text-area').innerHTML = task.description;
 
-    document.getElementById('statusSelect').value = task.status || 'todo';
+    Editor.init(area.querySelector('#notesEditor'), { onAttach: handleAttachment });
+    area.querySelector('#notesEditor .text-area').innerHTML = task.notes;
 
-    renderCategoryEditor(task);
+    area.querySelector('#saveBtn').addEventListener('click', saveTask);
+    area.querySelector('#deleteBtn').addEventListener('click', deleteTask);
+
+    renderCategoryTags();
     renderAttachments(task);
+    renderNewCategoryDropdown(); // Call to render the new dropdown
 
-    document.getElementById('addCategoryBtn').addEventListener('click', async ()=>{
-      const v = document.getElementById('newCategoryInput').value.trim(); if(!v) return;
-      if(!categories.includes(v)) categories.push(v);
-      await DB.putMeta('categories', categories); renderCategoryOptions(); renderCategoryEditor(currentTask);
-      document.getElementById('newCategoryInput').value = '';
-    });
-
-    document.getElementById('saveBtn').addEventListener('click', async ()=>{
-      currentTask.title = document.getElementById('taskTitle').value;
-      currentTask.from = document.getElementById('taskFrom').value;
-      currentTask.priority = Number(document.getElementById('taskPriority').value) || 3;
-      const dl = document.getElementById('taskDeadline').value; currentTask.deadline = dl ? dl + 'T00:00:00' : null;
-      currentTask.description = desc.getHTML(); currentTask.notes = notes.getHTML();
-      currentTask.status = document.getElementById('statusSelect').value;
-      currentTask.updatedAt = new Date().toISOString();
-      // The currentTask object, which now includes the attachments array, is saved.
-      await DB.putTask(currentTask);
-      await renderTaskList();
-      alert('Saved');
-    });
-
-    document.getElementById('deleteBtn').addEventListener('click', async ()=>{
-      if(!confirm('Delete this task?')) return;
-      await DB.deleteTask(currentTask.id);
-      currentTask = null; 
-      document.querySelector(selectors.editorArea).innerHTML = '<div class="placeholder">Select or create a task to view/edit details</div>';
-      await renderTaskList();
+    area.querySelector('#addCategoryBtn').addEventListener('click', () => {
+      const select = area.querySelector('#newCategorySelect');
+      const cat = select.value;
+      if (!cat || cat === '__placeholder') return; // Check for placeholder value
+      if (!task.categories.includes(cat)) {
+        task.categories.push(cat);
+        renderCategoryTags();
+        renderNewCategoryDropdown(); // Re-render dropdown to remove added category
+        saveTask();
+      }
+      select.value = '__placeholder'; // Reset dropdown
     });
   }
 
-  function escapeHtml(s){ return (s||'').replace(/[&<>\"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;' }[c]||c)); }
-
-  function renderCategoryEditor(task){
-    const container = document.getElementById('categoryList');
-    container.innerHTML = categories.map(c=>`<div><label><input type="checkbox" value="${c}" ${task.categories.includes(c)?'checked':''}> ${c}</label></div>`).join('');
-    container.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.addEventListener('change', ()=>{
-      const val = cb.value; if(cb.checked){ if(!task.categories.includes(val)) task.categories.push(val);} else { task.categories = task.categories.filter(x=>x!==val);} 
-    }));
+  function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
+
+  async function saveTask() {
+    if (!currentTask) return;
+    const editorArea = document.querySelector(selectors.editorArea);
+    const titleInput = editorArea.querySelector('#taskTitle');
+    const fromSelect = editorArea.querySelector('#taskFrom');
+    const priorityInput = editorArea.querySelector('#taskPriority');
+    const deadlineInput = editorArea.querySelector('#taskDeadline');
+    const statusSelect = editorArea.querySelector('#statusSelect');
+    
+    currentTask.title = titleInput.value;
+    currentTask.from = fromSelect.value;
+    currentTask.priority = parseInt(priorityInput.value, 10);
+    currentTask.deadline = deadlineInput.value || null;
+    currentTask.status = statusSelect.value;
+    currentTask.description = editorArea.querySelector('#descEditor .text-area').innerHTML;
+    currentTask.notes = editorArea.querySelector('#notesEditor .text-area').innerHTML;
+    currentTask.updatedAt = new Date().toISOString();
+
+    await DB.putTask(currentTask);
+    await renderTaskList();
+    openTaskEditor(currentTask);
+  }
+
+  async function deleteTask() {
+    if (!currentTask) return;
+    const confirmed = await new Promise(resolve => {
+        const tmpl = document.getElementById('modal-template').content;
+        const modalFragment = tmpl.cloneNode(true);
+        const modalBackdrop = modalFragment.querySelector('.modal-backdrop');
+
+        modalFragment.querySelector('h3').textContent = 'Delete Task';
+        modalFragment.querySelector('.modal-body').innerHTML = '<p>Are you sure you want to delete this task?</p>';
+        modalFragment.querySelector('.modal-footer').innerHTML = `
+            <button class="modal-cancel">Cancel</button>
+            <button class="modal-save danger">Delete</button>
+        `;
+        const saveBtn = modalFragment.querySelector('.modal-save');
+        const cancelBtn = modalFragment.querySelector('.modal-cancel');
+        
+        saveBtn.addEventListener('click', () => {
+            document.body.removeChild(modalBackdrop);
+            resolve(true);
+        });
+        cancelBtn.addEventListener('click', () => {
+            document.body.removeChild(modalBackdrop);
+            resolve(false);
+        });
+        document.body.appendChild(modalFragment);
+    });
+
+    if (confirmed) {
+        await DB.deleteTask(currentTask.id);
+        document.querySelector(selectors.editorArea).innerHTML = '<div class="placeholder">Select or create a task to view/edit details</div>';
+        currentTask = null;
+        await renderTaskList();
+    }
+  }
+
+
+  function renderCategoryTags() {
+    const list = document.querySelector('#categoryList');
+    list.innerHTML = '';
+    (currentTask.categories || []).forEach((cat, idx) => {
+      const tag = document.createElement('div');
+      tag.className = 'tag selected';
+      tag.innerHTML = `${escapeHtml(cat)}<button>x</button>`;
+      tag.querySelector('button').addEventListener('click', () => {
+        currentTask.categories.splice(idx, 1);
+        renderCategoryTags();
+        renderNewCategoryDropdown(); // Re-render dropdown when a tag is removed
+        saveTask();
+      });
+      list.appendChild(tag);
+    });
+  }
+
+  // New function to render the category dropdown
+  function renderNewCategoryDropdown() {
+    const select = document.querySelector('#newCategorySelect');
+    if (!select) return;
+
+    // Filter out categories already assigned to the current task
+    const availableCategories = categories.filter(cat => !currentTask.categories.includes(cat));
+
+    select.innerHTML = '<option value="__placeholder" disabled selected>Add category...</option>' + 
+                       availableCategories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('\n');
+  }
+
 
   function renderAttachments(task){
-    const el = document.getElementById('attachments'); el.innerHTML = '';
-    (task.attachments||[]).forEach((att,idx)=>{
-      const div = document.createElement('div'); div.className='attachment';
+    const el = document.querySelector('#attachments');
+    el.innerHTML = '';
+    (task.attachments || []).forEach((att, idx)=>{
+      const div = document.createElement('div'); div.className = 'attachment';
       const left = document.createElement('div'); left.textContent = att.name;
       const right = document.createElement('div');
       const dl = document.createElement('a'); dl.href = att.data; dl.download = att.name; dl.textContent = 'download';
-      const rm = document.createElement('button'); rm.textContent='remove'; rm.addEventListener('click', ()=>{ 
-        if (confirm(`Are you sure you want to remove "${att.name}"?`)) {
+      const rm = document.createElement('button'); rm.textContent='remove'; rm.addEventListener('click', async ()=>{ 
+        const confirmed = await new Promise(resolve => {
+          showModalAlertConfirm(`Are you sure you want to remove "${att.name}"?`, resolve);
+        });
+        if (confirmed) {
           task.attachments.splice(idx,1); 
           renderAttachments(task); 
+          saveTask();
         }
       });
       right.appendChild(dl); right.appendChild(document.createTextNode(' ')); right.appendChild(rm);
@@ -212,21 +411,80 @@ export const UI = (function(){
     });
   }
 
-  async function exportJSON(){
+  async function exportJSON() {
     const all = await DB.getAllTasks();
-    const blob = new Blob([JSON.stringify({tasks:all, categories},null,2)],{type:'application/json'});
+    const data = {
+        tasks: all,
+        categories: categories,
+        statuses: statuses,
+        froms: froms
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: 'application/json'
+    });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href=url; a.download='task-export.json'; a.click();
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'task-export.json';
+    a.click();
     URL.revokeObjectURL(url);
   }
 
-  async function importJSON(e){
-    const f = e.target.files[0]; if(!f) return; const txt = await f.text();
-    try{ const j = JSON.parse(txt); if(j.categories) categories = j.categories; if(j.tasks){ for(const t of j.tasks){ await DB.putTask(t); } }
-      await DB.putMeta('categories',categories); renderCategoryOptions(); await renderTaskList(); alert('Imported');
-    }catch(err){ alert('Invalid JSON'); }
-    e.target.value='';
+  async function importJSON(e) {
+    const f = e.target.files[0];
+    if (!f) return;
+    const txt = await f.text();
+    try {
+      const j = JSON.parse(txt);
+      if (j.categories) categories = j.categories;
+      if (j.statuses) statuses = j.statuses;
+      if (j.froms) froms = j.froms;
+      
+      if (j.tasks) {
+        for (const t of j.tasks) {
+          await DB.putTask(t);
+        }
+      }
+      await DB.putMeta('categories', categories);
+      await DB.putMeta('statuses', statuses);
+      await DB.putMeta('froms', froms);
+      
+      renderCategoryOptions();
+      renderStatusOptions();
+      await renderTaskList();
+    } catch (e) {
+      console.error(e);
+      showModalAlert('Error importing file.');
+    }
   }
 
-  return { init };
+  // Custom confirmation modal
+  function showModalAlertConfirm(message, resolve) {
+      const tmpl = document.getElementById('modal-template').content;
+      const modalFragment = tmpl.cloneNode(true);
+      const modalBackdrop = modalFragment.querySelector('.modal-backdrop');
+
+      modalFragment.querySelector('h3').textContent = 'Confirm';
+      modalFragment.querySelector('.modal-body').innerHTML = `<p>${escapeHtml(message)}</p>`;
+      modalFragment.querySelector('.modal-footer').innerHTML = `
+          <button class="modal-cancel">Cancel</button>
+          <button class="modal-save danger">Confirm</button>
+      `;
+      
+      const saveBtn = modalFragment.querySelector('.modal-save');
+      const cancelBtn = modalFragment.querySelector('.modal-cancel');
+
+      saveBtn.addEventListener('click', () => {
+          document.body.removeChild(modalBackdrop);
+          resolve(true);
+      });
+      cancelBtn.addEventListener('click', () => {
+          document.body.removeChild(modalBackdrop);
+          resolve(false);
+      });
+      document.body.appendChild(modalFragment);
+  }
+
+
+  return {init};
 })();
