@@ -73,6 +73,20 @@
     .task-item .right .date-info span {
       display: block; /* Stack dates for clarity in list view */
     }
+    /* Specific styles for filter date ranges to be inline */
+    .filter-date-group {
+      display: flex;
+      flex-direction: column; /* Stack label and input group */
+      gap: 4px; /* Space between label and inputs */
+      margin-bottom: 8px; /* Space between date groups */
+    }
+    .filter-date-group .date-inputs-inline {
+      display: flex;
+      gap: 8px; /* Space between from and to inputs */
+    }
+    .filter-date-group .date-inputs-inline input {
+      flex: 1; /* Make inputs take equal space */
+    }
   </style>
 </head>
 <body>
@@ -86,8 +100,43 @@
       </div>
       <div id="filterSection" class="filters-collapsible"> <!-- New wrapper for filters -->
         <section class="filters">
-          <label>Date range</label>
-          <input type="date" id="rangeFrom"> to <input type="date" id="rangeTo">
+          <!-- Created Date -->
+          <div class="filter-date-group">
+            <label>Created Date</label>
+            <div class="date-inputs-inline">
+              <input type="date" id="createdRangeFrom">
+              <span>to</span>
+              <input type="date" id="createdRangeTo">
+            </div>
+          </div>
+          <!-- Updated Date -->
+          <div class="filter-date-group">
+            <label>Updated Date</label>
+            <div class="date-inputs-inline">
+              <input type="date" id="updatedRangeFrom">
+              <span>to</span>
+              <input type="date" id="updatedRangeTo">
+            </div>
+          </div>
+          <!-- Deadline Date -->
+          <div class="filter-date-group">
+            <label>Deadline Date</label>
+            <div class="date-inputs-inline">
+              <input type="date" id="deadlineRangeFrom">
+              <span>to</span>
+              <input type="date" id="deadlineRangeTo">
+            </div>
+          </div>
+          <!-- Finished Date -->
+          <div class="filter-date-group">
+            <label>Finished Date</label>
+            <div class="date-inputs-inline">
+              <input type="date" id="finishedRangeFrom">
+              <span>to</span>
+              <input type="date" id="finishedRangeTo">
+            </div>
+          </div>
+
           <label>Category</label>
           <select id="filterCategory"><option value="__all">All</option></select>
           <label>Status</label>

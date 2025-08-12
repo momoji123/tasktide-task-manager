@@ -4,12 +4,16 @@ import {Editor} from './editor.js';
 export const UI = (function() {
   const selectors = {
     newTaskBtn: '#newTaskBtn', searchInput: '#searchInput', taskList: '#taskList', editorArea: '#editorArea',
-    filterCategory: '#filterCategory', filterStatus: '#filterStatus', sortBy: '#sortBy', rangeFrom: '#rangeFrom', rangeTo: '#rangeTo',
-    // Updated selectors for the new settings menu structure
+    filterCategory: '#filterCategory', filterStatus: '#filterStatus', sortBy: '#sortBy',
+    // Updated date range selectors
+    createdRangeFrom: '#createdRangeFrom', createdRangeTo: '#createdRangeTo',
+    updatedRangeFrom: '#updatedRangeFrom', updatedRangeTo: '#updatedRangeTo',
+    deadlineRangeFrom: '#deadlineRangeFrom', deadlineRangeTo: '#deadlineRangeTo',
+    finishedRangeFrom: '#finishedRangeFrom', finishedRangeTo: '#finishedRangeTo',
+
     exportBtn: '#exportBtn', importBtn: '#importBtn', importFile: '#importFile',
     settingsBtn: '#settingsBtn', settingsDropdown: '#settingsDropdown',
     manageCategoriesBtn: '#manageCategoriesBtn', manageStatusesBtn: '#manageStatusesBtn', manageFromsBtn: '#manageFromsBtn',
-    // New selectors for filter toggle and clear all
     toggleFilterBtn: '#toggleFilterBtn', filterSection: '#filterSection', clearAllBtn: '#clearAllBtn',
   };
 
@@ -115,12 +119,24 @@ export const UI = (function() {
     document.querySelector(selectors.importBtn).addEventListener('click', () => document.querySelector(selectors.importFile).click());
     document.querySelector(selectors.importFile).addEventListener('change', importJSON);
 
+    // Add event listeners for new date filter inputs
+    document.querySelector(selectors.createdRangeFrom).addEventListener('change', renderTaskList);
+    document.querySelector(selectors.createdRangeTo).addEventListener('change', renderTaskList);
+    document.querySelector(selectors.updatedRangeFrom).addEventListener('change', renderTaskList);
+    document.querySelector(selectors.updatedRangeTo).addEventListener('change', renderTaskList);
+    document.querySelector(selectors.deadlineRangeFrom).addEventListener('change', renderTaskList);
+    document.querySelector(selectors.deadlineRangeTo).addEventListener('change', renderTaskList);
+    document.querySelector(selectors.finishedRangeFrom).addEventListener('change', renderTaskList);
+    document.querySelector(selectors.finishedRangeTo).addEventListener('change', renderTaskList);
+
+
     document.querySelector(selectors.searchInput).addEventListener('input', renderTaskList);
     document.querySelector(selectors.sortBy).addEventListener('change', renderTaskList);
     document.querySelector(selectors.filterCategory).addEventListener('change', renderTaskList);
     document.querySelector(selectors.filterStatus).addEventListener('change', renderTaskList);
-    document.querySelector(selectors.rangeFrom).addEventListener('change', renderTaskList);
-    document.querySelector(selectors.rangeTo).addEventListener('change', renderTaskList);
+    // Removed rangeFrom and rangeTo listeners as they are now createdRangeFrom/To
+    // document.querySelector(selectors.rangeFrom).addEventListener('change', renderTaskList);
+    // document.querySelector(selectors.rangeTo).addEventListener('change', renderTaskList);
 
     await renderTaskList();
   }
@@ -153,8 +169,16 @@ export const UI = (function() {
     const filterStat = document.querySelector(selectors.filterStatus).value;
     const sortVal = document.querySelector(selectors.sortBy).value;
 
-    const rf = document.querySelector(selectors.rangeFrom).value;
-    const rt = document.querySelector(selectors.rangeTo).value;
+    // Get values for all new date range filters
+    const createdRF = document.querySelector(selectors.createdRangeFrom).value;
+    const createdRT = document.querySelector(selectors.createdRangeTo).value;
+    const updatedRF = document.querySelector(selectors.updatedRangeFrom).value;
+    const updatedRT = document.querySelector(selectors.updatedRangeTo).value;
+    const deadlineRF = document.querySelector(selectors.deadlineRangeFrom).value;
+    const deadlineRT = document.querySelector(selectors.deadlineRangeTo).value;
+    const finishedRF = document.querySelector(selectors.finishedRangeFrom).value;
+    const finishedRT = document.querySelector(selectors.finishedRangeTo).value;
+
 
     let filtered = tasks.filter(t => {
       // Search filter
@@ -163,12 +187,35 @@ export const UI = (function() {
       if (filterCat !== '__all' && !t.categories.includes(filterCat)) return false;
       // Status filter
       if (filterStat !== '__all' && t.status !== filterStat) return false;
-      // Date range filter (using updatedAt for now, could be expanded to include finishDate or deadline)
-      if ((rf || rt) && t.updatedAt) {
-        const u = new Date(t.updatedAt);
-        if (rf && u < new Date(rf)) return false;
-        if (rt && u > new Date(rt + 'T23:59:59')) return false;
+      
+      // Created Date filter
+      if ((createdRF || createdRT) && t.createdAt) {
+        const c = new Date(t.createdAt);
+        if (createdRF && c < new Date(createdRF)) return false;
+        if (createdRT && c > new Date(createdRT + 'T23:59:59')) return false;
       }
+      // Updated Date filter
+      if ((updatedRF || updatedRT) && t.updatedAt) {
+        const u = new Date(t.updatedAt);
+        if (updatedRF && u < new Date(updatedRF)) return false;
+        if (updatedRT && u > new Date(updatedRT + 'T23:59:59')) return false;
+      }
+      // Deadline Date filter
+      if ((deadlineRF || deadlineRT) && t.deadline) {
+        const d = new Date(t.deadline);
+        if (deadlineRF && d < new Date(deadlineRF)) return false;
+        if (deadlineRT && d > new Date(deadlineRT + 'T23:59:59')) return false;
+      }
+      // Finished Date filter
+      if ((finishedRF || finishedRT)) {
+        if(!t.finishDate){
+          return false;
+        }
+        const f = new Date(t.finishDate);
+        if (finishedRF && f < new Date(finishedRF)) return false;
+        if (f > new Date(finishedRT + 'T23:59:59')) return false;
+      }
+
       return true;
     });
 
