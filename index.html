@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Task Manager — Pure HTML/CSS/JS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app" class="app">
+    <aside class="sidebar">
+      <h1>TasksMaster</h1>
+      <div class="controls">
+        <button id="newTaskBtn">+ New Task</button>
+        <!-- Bug fix: Updated placeholder to include description -->
+        <input id="searchInput" type="search" placeholder="Search title, from, description, notes...">
+      </div>
+      <section class="filters">
+        <label>Date range</label>
+        <input type="date" id="rangeFrom"> to <input type="date" id="rangeTo">
+        <label>Category</label>
+        <select id="filterCategory"><option value="__all">All</option></select>
+        <label>Status</label>
+        <select id="filterStatus"><option value="__all">All</option><option>todo</option><option>in-progress</option><option>done</option></select>
+        <label>Sort by</label>
+        <select id="sortBy">
+          <option value="updatedAt">Last updated</option>
+          <option value="deadline">Deadline</option>
+          <option value="priority">Priority</option>
+          <option value="from">From</option>
+        </select>
+      </section>
+      <section id="taskList" class="task-list"></section>
+    </aside>
+
+    <main class="main">
+      <header class="main-header">
+        <div class="breadcrumbs">Task Manager • Local</div>
+        <div class="header-actions">
+          <button id="manageCategoriesBtn">Manage categories</button>
+          <button id="exportBtn">Export JSON</button>
+          <button id="importBtn">Import JSON</button>
+          <input id="importFile" type="file" accept="application/json" hidden>
+        </div>
+      </header>
+
+      <section class="editor-area" id="editorArea">
+        <div class="placeholder">Select or create a task to view/edit details</div>
+      </section>
+    </main>
+  </div>
+
+  <template id="task-item-template">
+    <div class="task-item">
+      <div class="left">
+        <div class="title"></div>
+        <div class="meta"></div>
+      </div>
+      <div class="right">
+        <div class="priority"></div>
+        <div class="deadline"></div>
+      </div>
+    </div>
+  </template>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
