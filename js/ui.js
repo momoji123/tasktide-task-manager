@@ -21,6 +21,7 @@ export const UI = (function() {
     settingsBtn: '#settingsBtn', settingsDropdown: '#settingsDropdown',
     manageCategoriesBtn: '#manageCategoriesBtn', manageStatusesBtn: '#manageStatusesBtn', manageFromsBtn: '#manageFromsBtn',
     toggleFilterBtn: '#toggleFilterBtn', filterSection: '#filterSection', clearAllBtn: '#clearAllBtn',
+    filterColumn: '#filterColumn', // New selector for the filter column
   };
 
   let currentTask = null;
@@ -112,16 +113,20 @@ export const UI = (function() {
 
     // Filter section toggle
     const toggleFilterBtn = document.querySelector(selectors.toggleFilterBtn);
-    const filterSection = document.querySelector(selectors.filterSection);
+    // Target the new filterColumn for toggling
+    const filterColumn = document.querySelector(selectors.filterColumn);
+    const appContainer = document.querySelector('.app'); // Get the main app container
 
     toggleFilterBtn.addEventListener('click', async () => {
       filterSectionVisible = !filterSectionVisible;
-      filterSection.classList.toggle('show', filterSectionVisible);
+      // Toggle a class on the main app container to change grid columns
+      appContainer.classList.toggle('filter-active', filterSectionVisible);
       await DB.putMeta('filterSectionVisible', filterSectionVisible); // Save state
     });
 
     // Apply initial visibility state
-    filterSection.classList.toggle('show', filterSectionVisible);
+    appContainer.classList.toggle('filter-active', filterSectionVisible);
+
 
     document.querySelector(selectors.exportBtn).addEventListener('click', exportJSON);
     document.querySelector(selectors.importBtn).addEventListener('click', () => document.querySelector(selectors.importFile).click());

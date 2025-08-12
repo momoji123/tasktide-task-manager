@@ -45,13 +45,13 @@
       display: block;
     }
 
-    /* Styles for the filter section toggle */
+    /* Styles for the filter section toggle - now handled by parent column */
+    /* The filters-collapsible class itself will always be displayed within the column */
     .filters-collapsible {
-      display: none; /* Hidden by default */
-    }
-
-    .filters-collapsible.show {
-      display: block; /* Shown when 'show' class is present */
+      /* This ensures the content itself is visible within its parent container */
+      display: block; 
+      height: 100%; /* Take full height of its container */
+      overflow-y: auto; /* Enable scrolling for content if it overflows */
     }
 
     /* Style for the date inputs to make them align nicely */
@@ -109,6 +109,11 @@
         <input id="searchInput" type="search" placeholder="Search title, from, description, notes...">
         <button id="toggleFilterBtn">Toggle Filters</button> <!-- New filter toggle button -->
       </div>
+      <section id="taskList" class="task-list"></section>
+    </aside>
+
+    <!-- New Filter Column -->
+    <aside id="filterColumn" class="filter-column">
       <div id="filterSection" class="filters-collapsible"> <!-- New wrapper for filters -->
         <section class="filters">
           <!-- Created Date -->
@@ -167,7 +172,7 @@
           <select id="filterStatus"><option value="__all">All</option></select>
         </section>
       </div>
-      <!-- Group By Section - outside filters -->
+      <!-- Group By Section - moved here to be part of the filter column -->
       <section class="group-by-section">
         <label>Group by</label>
         <select id="groupBy">
@@ -191,7 +196,6 @@
           <option value="from">From</option>
         </select>
       </section>
-      <section id="taskList" class="task-list"></section>
     </aside>
 
     <main class="main">
