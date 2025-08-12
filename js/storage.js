@@ -7,7 +7,8 @@ export const DB = (function(){
   function open(){
     return new Promise((resolve,reject)=>{
       if(db) return resolve(db);
-      const r = indexedDB.open(DB_NAME, 2); // Version bump to 2 to trigger onupgradeneeded
+      // Version bump to 3 to trigger onupgradeneeded for finishDate
+      const r = indexedDB.open(DB_NAME, 3); 
       r.onupgradeneeded = e => {
         const idb = e.target.result;
         // Task store
@@ -15,16 +16,30 @@ export const DB = (function(){
           const tstore = idb.createObjectStore(STORE_TASKS,{keyPath:'id'});
           tstore.createIndex('deadline','deadline',{unique:false});
           tstore.createIndex('updatedAt','updatedAt',{unique:false});
+          tstore.createIndex('from','from',{unique:false}); // Ensure 'from' index exists
         }
         // Meta store for custom categories, statuses, etc.
         if(!idb.objectStoreNames.contains(STORE_META)){
           idb.createObjectStore(STORE_META,{keyPath:'key'});
         }
 
-        // Add 'from' index if it doesn't exist (new in version 2)
-        const tstore = r.transaction.objectStore(STORE_TASKS);
+        // Get the object store for tasks (if it already exists for version upgrade)
+        let tstore;
+        try {
+            tstore = r.transaction.objectStore(STORE_TASKS);
+        } catch (error) {
+            // If the store doesn't exist, it means it was just created above
+            tstore = idb.objectStore(STORE_TASKS);
+        }
+
+        // Add 'from' index if it doesn't exist (from previous version update)
         if (!tstore.indexNames.contains('from')) {
           tstore.createIndex('from', 'from', {unique: false});
+        }
+        
+        // Add 'finishDate' index if it doesn't exist (new in version 3)
+        if (!tstore.indexNames.contains('finishDate')) {
+          tstore.createIndex('finishDate', 'finishDate', {unique: false});
         }
       };
       r.onsuccess = e => { db = e.target.result; resolve(db); };

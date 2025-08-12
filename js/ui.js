@@ -129,6 +129,7 @@ export const UI = (function() {
       attachments: [],
       priority: 3,
       deadline: null,
+      finishDate: null, // Initialize finishDate
       from: froms[0] || '', // Use the first custom from as default
       categories: [categories[0] || 'General'], // Use the first custom category as default
       status: statuses[0] || 'todo', // Use the first custom status as default
@@ -156,11 +157,11 @@ export const UI = (function() {
       if (filterCat !== '__all' && !t.categories.includes(filterCat)) return false;
       // Status filter
       if (filterStat !== '__all' && t.status !== filterStat) return false;
-      // Date range filter
-      if ((rf || rt) && t.deadline) {
-        const u = new Date(t.deadline);
+      // Date range filter (using updatedAt for now, could be expanded to include finishDate or deadline)
+      if ((rf || rt) && t.updatedAt) {
+        const u = new Date(t.updatedAt);
         if (rf && u < new Date(rf)) return false;
-        if (rt && u > new Date(rt)) return false;
+        if (rt && u > new Date(rt + 'T23:59:59')) return false;
       }
       return true;
     });
@@ -178,8 +179,23 @@ export const UI = (function() {
       const el = node.querySelector('.task-item');
       el.querySelector('.title').textContent = t.title || '(no title)';
       el.querySelector('.meta').textContent = `${t.from || '—'} • ${t.categories.join(', ')} • ${t.status}`;
+      
+      const deadlineText = t.deadline ? `Due: ${new Date(t.deadline).toLocaleDateString()}` : '';
+      const finishDateText = t.finishDate ? `Finished: ${new Date(t.finishDate).toLocaleDateString()}` : '';
+
       el.querySelector('.priority').textContent = ['!', '!!', '!!!'][Math.max(0, 3 - t.priority)] || t.priority;
-      el.querySelector('.deadline').textContent = t.deadline ? new Date(t.deadline).toLocaleDateString() : '';
+      
+      // Target the new display elements
+      const deadlineDisplay = el.querySelector('.deadline-display');
+      const finishDateDisplay = el.querySelector('.finish-date-display');
+
+      if (deadlineDisplay) {
+        deadlineDisplay.textContent = deadlineText;
+      }
+      if (finishDateDisplay) {
+        finishDateDisplay.textContent = finishDateText;
+      }
+
       el.addEventListener('click', () => openTaskEditor(t));
       container.appendChild(node);
     });
@@ -319,8 +335,16 @@ export const UI = (function() {
           <select id="taskFrom">${froms.map(f=>`<option value="${escapeHtml(f)}" ${f === task.from ? 'selected':''}>${escapeHtml(f)}</option>`).join('')}</select>
           <div class="label">Priority (1-high,5-low)</div>
           <input id="taskPriority" type="number" min="1" max="5" value="${task.priority}">
-          <div class="label">Deadline</div>
-          <input id="taskDeadline" type="date" value="${task.deadline ? task.deadline.split('T')[0]:''}">
+          <div class="date-inputs">
+            <div>
+              <div class="label">Deadline</div>
+              <input id="taskDeadline" type="date" value="${task.deadline ? task.deadline.split('T')[0]:''}">
+            </div>
+            <div>
+              <div class="label">Finish Date</div>
+              <input id="taskFinishDate" type="date" value="${task.finishDate ? task.finishDate.split('T')[0]:''}">
+            </div>
+          </div>
           <div class="label">Status</div>
           <select id="statusSelect">${statuses.map(s=>`<option value="${escapeHtml(s)}" ${s === task.status ? 'selected':''}>${escapeHtml(s)}</option>`).join('')}</select>
           <div class="label">Description</div>
@@ -399,12 +423,14 @@ export const UI = (function() {
     const fromSelect = editorArea.querySelector('#taskFrom');
     const priorityInput = editorArea.querySelector('#taskPriority');
     const deadlineInput = editorArea.querySelector('#taskDeadline');
+    const finishDateInput = editorArea.querySelector('#taskFinishDate'); // Get finish date input
     const statusSelect = editorArea.querySelector('#statusSelect');
     
     currentTask.title = titleInput.value;
     currentTask.from = fromSelect.value;
     currentTask.priority = parseInt(priorityInput.value, 10);
     currentTask.deadline = deadlineInput.value || null;
+    currentTask.finishDate = finishDateInput.value || null; // Save finishDate
     currentTask.status = statusSelect.value;
     currentTask.description = editorArea.querySelector('#descEditor .text-area').innerHTML;
     currentTask.notes = editorArea.querySelector('#notesEditor .text-area').innerHTML;

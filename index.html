@@ -53,6 +53,26 @@
     .filters-collapsible.show {
       display: block; /* Shown when 'show' class is present */
     }
+
+    /* Style for the date inputs to make them align nicely */
+    .date-inputs {
+      display: flex;
+      gap: 8px;
+    }
+    .date-inputs input {
+      flex: 1;
+    }
+
+    /* Style for task item dates to stack or flow */
+    .task-item .right .date-info {
+      font-size: 11px; /* Smaller font for dates */
+      color: var(--muted);
+      text-align: right;
+      margin-top: 2px;
+    }
+    .task-item .right .date-info span {
+      display: block; /* Stack dates for clarity in list view */
+    }
   </style>
 </head>
 <body>
@@ -118,7 +138,10 @@
       </div>
       <div class="right">
         <div class="priority"></div>
-        <div class="deadline"></div>
+        <div class="date-info">
+          <span class="deadline-display"></span>
+          <span class="finish-date-display"></span>
+        </div>
       </div>
     </div>
   </template>
