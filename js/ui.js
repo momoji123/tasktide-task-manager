@@ -9,12 +9,15 @@ export const UI = (function() {
     exportBtn: '#exportBtn', importBtn: '#importBtn', importFile: '#importFile',
     settingsBtn: '#settingsBtn', settingsDropdown: '#settingsDropdown',
     manageCategoriesBtn: '#manageCategoriesBtn', manageStatusesBtn: '#manageStatusesBtn', manageFromsBtn: '#manageFromsBtn',
+    // New selectors for filter toggle and clear all
+    toggleFilterBtn: '#toggleFilterBtn', filterSection: '#filterSection', clearAllBtn: '#clearAllBtn',
   };
 
   let currentTask = null;
   let categories = [];
   let statuses = [];
   let froms = [];
+  let filterSectionVisible = true; // Default state for filter section visibility
 
   // Helper function for creating a modal
   function createModal(title, contentHtml) {
@@ -57,6 +60,9 @@ export const UI = (function() {
     categories = (await DB.getMeta('categories')) || ['General'];
     statuses = (await DB.getMeta('statuses')) || ['todo', 'in-progress', 'done'];
     froms = (await DB.getMeta('froms')) || ['Work', 'Personal', 'Shopping'];
+    // Load filter section visibility state
+    filterSectionVisible = (await DB.getMeta('filterSectionVisible')) ?? true;
+
 
     renderCategoryOptions();
     renderStatusOptions();
@@ -83,6 +89,21 @@ export const UI = (function() {
     document.querySelector(selectors.manageCategoriesBtn).addEventListener('click', manageCategories);
     document.querySelector(selectors.manageStatusesBtn).addEventListener('click', manageStatuses);
     document.querySelector(selectors.manageFromsBtn).addEventListener('click', manageFroms);
+    document.querySelector(selectors.clearAllBtn).addEventListener('click', clearAllData); // Event listener for clear all
+
+    // Filter section toggle
+    const toggleFilterBtn = document.querySelector(selectors.toggleFilterBtn);
+    const filterSection = document.querySelector(selectors.filterSection);
+
+    toggleFilterBtn.addEventListener('click', async () => {
+      filterSectionVisible = !filterSectionVisible;
+      filterSection.classList.toggle('show', filterSectionVisible);
+      await DB.putMeta('filterSectionVisible', filterSectionVisible); // Save state
+    });
+
+    // Apply initial visibility state
+    filterSection.classList.toggle('show', filterSectionVisible);
+
 
     document.querySelector(selectors.exportBtn).addEventListener('click', exportJSON);
     document.querySelector(selectors.importBtn).addEventListener('click', () => document.querySelector(selectors.importFile).click());
@@ -136,10 +157,10 @@ export const UI = (function() {
       // Status filter
       if (filterStat !== '__all' && t.status !== filterStat) return false;
       // Date range filter
-      if ((rf || rt) && t.updatedAt) {
-        const u = new Date(t.updatedAt);
+      if ((rf || rt) && t.deadline) {
+        const u = new Date(t.deadline);
         if (rf && u < new Date(rf)) return false;
-        if (rt && u > new Date(rt + 'T23:59:59')) return false;
+        if (rt && u > new Date(rt)) return false;
       }
       return true;
     });
@@ -234,6 +255,55 @@ export const UI = (function() {
           document.body.removeChild(modalBackdrop);
       });
       document.body.appendChild(modalFragment);
+  }
+
+  // New function to clear all persisted data
+  async function clearAllData() {
+    const confirmed = await new Promise(resolve => {
+        const tmpl = document.getElementById('modal-template').content;
+        const modalFragment = tmpl.cloneNode(true);
+        const modalBackdrop = modalFragment.querySelector('.modal-backdrop');
+
+        modalFragment.querySelector('h3').textContent = 'Clear All Data';
+        modalFragment.querySelector('.modal-body').innerHTML = '<p>Are you sure you want to clear ALL persisted data (tasks, categories, statuses, settings)? This action cannot be undone.</p>';
+        modalFragment.querySelector('.modal-footer').innerHTML = `
+            <button class="modal-cancel">Cancel</button>
+            <button class="modal-save danger">Clear All</button>
+        `;
+        const saveBtn = modalFragment.querySelector('.modal-save');
+        const cancelBtn = modalFragment.querySelector('.modal-cancel');
+        
+        saveBtn.addEventListener('click', () => {
+            document.body.removeChild(modalBackdrop);
+            resolve(true);
+        });
+        cancelBtn.addEventListener('click', () => {
+            document.body.removeChild(modalBackdrop);
+            resolve(false);
+        });
+        document.body.appendChild(modalFragment);
+    });
+
+    if (confirmed) {
+        // Close the IndexedDB connection before deleting the database
+        await DB.close(); // Ensure DB connection is closed
+
+        // Delete the IndexedDB database
+        const req = indexedDB.deleteDatabase('taskmgr-v1'); // Assuming DB_NAME from storage.js
+
+        req.onsuccess = () => {
+            console.log("Database deleted successfully");
+            // Also clear any localStorage if used for other settings (though this app primarily uses IndexedDB)
+            localStorage.clear(); 
+            // Reload the page to reflect the cleared state
+            window.location.reload();
+        };
+
+        req.onerror = (event) => {
+            console.error("Error deleting database:", event.target.error);
+            showModalAlert(`Error clearing data: ${event.target.error.message}`);
+        };
+    }
   }
 
 

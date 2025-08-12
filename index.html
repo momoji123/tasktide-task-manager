@@ -44,6 +44,15 @@
     .dropdown-content.show {
       display: block;
     }
+
+    /* Styles for the filter section toggle */
+    .filters-collapsible {
+      display: none; /* Hidden by default */
+    }
+
+    .filters-collapsible.show {
+      display: block; /* Shown when 'show' class is present */
+    }
   </style>
 </head>
 <body>
@@ -53,26 +62,25 @@
       <div class="controls">
         <button id="newTaskBtn">+ New Task</button>
         <input id="searchInput" type="search" placeholder="Search title, from, description, notes...">
+        <button id="toggleFilterBtn">Toggle Filters</button> <!-- New filter toggle button -->
       </div>
-      <section class="filters">
-        <label>Date range</label>
-        <input type="date" id="rangeFrom"> to <input type="date" id="rangeTo">
-        <label>Category</label>
-        <select id="filterCategory"><option value="__all">All</option></select>
-        <label>Status</label>
-        <select id="filterStatus"><option value="__all">All</option></select>
-        <label>Sort by</label>
-        <select id="sortBy">
-          <option value="updatedAt">Last updated</option>
-          <option value="deadline">Deadline</option>
-          <option value="priority">Priority</option>
-          <option value="from">From</option>
-        </select>
-        <!-- These buttons are now part of a dropdown menu in the header -->
-        <!-- <button id="manageCategoriesBtn" class="manage-btn">Manage Categories</button>
-        <button id="manageStatusesBtn" class="manage-btn">Manage Statuses</button>
-        <button id="manageFromsBtn" class="manage-btn">Manage Froms</button> -->
-      </section>
+      <div id="filterSection" class="filters-collapsible"> <!-- New wrapper for filters -->
+        <section class="filters">
+          <label>Date range</label>
+          <input type="date" id="rangeFrom"> to <input type="date" id="rangeTo">
+          <label>Category</label>
+          <select id="filterCategory"><option value="__all">All</option></select>
+          <label>Status</label>
+          <select id="filterStatus"><option value="__all">All</option></select>
+          <label>Sort by</label>
+          <select id="sortBy">
+            <option value="updatedAt">Last updated</option>
+            <option value="deadline">Deadline</option>
+            <option value="priority">Priority</option>
+            <option value="from">From</option>
+          </select>
+        </section>
+      </div>
       <section id="taskList" class="task-list"></section>
     </aside>
 
@@ -90,6 +98,7 @@
               <button id="manageCategoriesBtn">Manage Categories</button>
               <button id="manageStatusesBtn">Manage Statuses</button>
               <button id="manageFromsBtn">Manage Froms</button>
+              <button id="clearAllBtn" style="color: var(--danger);">Clear All Data</button> <!-- New Clear All button -->
             </div>
           </div>
         </div>

@@ -94,5 +94,13 @@ export const DB = (function(){
     });
   }
 
-  return {putTask,getTask,deleteTask,getAllTasks,putMeta,getMeta};
+  // New function to close the IndexedDB connection
+  function close() {
+    if (db) {
+      db.close();
+      db = null; // Clear the reference
+    }
+  }
+
+  return {putTask,getTask,deleteTask,getAllTasks,putMeta,getMeta,close};
 })();
