@@ -423,3 +423,136 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial}
 .group-content:not(.show) {
     max-height: 0; /* Collapse height to 0 */
 }
+
+/* New styles for Milestones */
+.milestones-modal-content {
+    max-width: 900px; /* Wider modal for milestones */
+    width: 95%;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh; /* Limit height to viewport */
+}
+
+.milestones-view-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    flex-grow: 1; /* Allow body to take available space */
+    overflow: hidden; /* Hide scrollbars for the overall body */
+}
+
+.milestone-controls {
+    display: flex;
+    justify-content: flex-end; /* Align add button to the right */
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eef2f7;
+}
+
+.milestone-graph-container {
+    flex-grow: 1; /* Allow graph to take available vertical space */
+    overflow-y: auto; /* Enable scrolling for the graph */
+    display: flex;
+    flex-direction: column; /* Stack bubbles vertically */
+    align-items: center; /* Center bubbles horizontally */
+    position: relative; /* For positioning SVG lines */
+    padding: 20px 0; /* Padding for the graph area */
+}
+
+.milestone-graph-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Allow clicks to pass through to bubbles */
+    z-index: 1; /* Below bubbles */
+}
+
+.milestone-connector-line {
+    stroke: var(--muted);
+    stroke-width: 2px;
+}
+
+.milestone-bubble {
+    background-color: var(--card);
+    border: 2px solid var(--muted);
+    border-radius: 20px; /* More rounded, pill-like shape */
+    padding: 8px 15px;
+    margin: 15px 0; /* Vertical spacing between bubbles */
+    text-align: center;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    min-width: 150px; /* Minimum width for readability */
+    max-width: 250px; /* Max width to prevent overly long bubbles */
+    z-index: 2; /* Above SVG lines */
+    position: relative; /* For accurate positioning */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.milestone-bubble:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.milestone-bubble.selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(43, 124, 255, 0.3);
+}
+
+.milestone-title {
+    font-weight: 600;
+    color: #333;
+    word-break: break-word; /* Allow long titles to wrap */
+}
+
+.milestone-status {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background-color: #f0f2f7;
+    white-space: nowrap; /* Prevent status text from wrapping */
+}
+
+/* Status-specific colors for bubbles */
+.milestone-bubble.status-todo {
+    border-color: #999;
+}
+.milestone-bubble.status-in-progress {
+    border-color: #f39c12; /* Orange */
+}
+.milestone-bubble.status-done {
+    border-color: #27ae60; /* Green */
+}
+
+.milestone-editor-area {
+    background: var(--card);
+    border-radius: 8px;
+    padding: 16px;
+    overflow-y: auto; /* Enable scrolling for editor content if it overflows */
+    border: 1px solid #eef2f7;
+    min-height: 250px; /* Ensure editor area has some height */
+}
+
+.milestone-editor-card {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Ensure editor controls appear on new button */
+.editor .toolbar {
+  margin-bottom: 8px;
+}
+
+.editor .text-area {
+  min-height: 100px; /* Adjusted min-height for notes editor */
+  border: 1px solid #eef2f7;
+  padding: 8px;
+  border-radius: 6px;
+}

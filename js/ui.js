@@ -22,9 +22,26 @@ export const UI = (function() {
     manageCategoriesBtn: '#manageCategoriesBtn', manageStatusesBtn: '#manageStatusesBtn', manageFromsBtn: '#manageFromsBtn',
     toggleFilterBtn: '#toggleFilterBtn', filterSection: '#filterSection', clearAllBtn: '#clearAllBtn',
     filterColumn: '#filterColumn', // New selector for the filter column
+
+    // Milestone related selectors
+    openMilestonesBtn: '#openMilestonesBtn',
+    milestonesViewTitle: '#milestonesViewTitle',
+    milestonesTaskTitle: '#milestonesTaskTitle',
+    closeMilestonesView: '#closeMilestonesView',
+    addMilestoneBtn: '#addMilestoneBtn',
+    milestonesGraphContainer: '#milestonesGraphContainer',
+    milestoneEditorArea: '#milestoneEditorArea',
+    milestoneTitleInput: '#milestoneTitle',
+    milestoneDeadlineInput: '#milestoneDeadline',
+    milestoneFinishDateInput: '#milestoneFinishDate',
+    milestoneStatusSelect: '#milestoneStatusSelect',
+    milestoneNotesEditor: '#milestoneNotesEditor',
+    saveMilestoneBtn: '#saveMilestoneBtn',
+    deleteMilestoneBtn: '#deleteMilestoneBtn',
   };
 
   let currentTask = null;
+  let currentMilestone = null; // New state for the currently opened milestone
   let categories = [];
   let statuses = [];
   let froms = [];
@@ -187,6 +204,23 @@ export const UI = (function() {
     };
   }
 
+  // New function to create an empty milestone
+  function createEmptyMilestone(taskId) {
+    const id = 'm_' + Date.now();
+    return {
+      id,
+      taskId: taskId, // Link to parent task
+      title: 'New Milestone',
+      notes: '',
+      deadline: null,
+      finishDate: null,
+      status: statuses[0] || 'todo',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+
   async function renderTaskList() {
     const container = document.querySelector(selectors.taskList);
     container.innerHTML = '';
@@ -337,7 +371,6 @@ export const UI = (function() {
                 const pB = parseInt(b.replace('Priority ', ''), 10);
                 if (!isNaN(pA) && !isNaN(pB)) return pA - pB;
             }
-            console.log("default")
             // Default alphabetical sort for other keys, with 'No X' last
             if (a.startsWith('No ')) return 1;
             if (b.startsWith('No ')) return -1;
@@ -548,10 +581,15 @@ export const UI = (function() {
                 showModalAlert(`Cannot delete category "${itemToRemove}" because it is currently assigned to one or more tasks.`);
               }
             } else if (type === 'statuses') {
-              isInUse = allTasks.some(task => task.status === itemToRemove);
-              if (isInUse) {
-                showModalAlert(`Cannot delete status "${itemToRemove}" because it is currently in use by one or more tasks.`);
+              // Check if status is used by tasks OR milestones
+              const tasksUse = allTasks.some(task => task.status === itemToRemove);
+              const allMilestones = await Promise.all(allTasks.map(t => DB.getMilestonesForTask(t.id))).then(arr => arr.flat());
+              const milestonesUse = allMilestones.some(m => m.status === itemToRemove);
+
+              if (tasksUse || milestonesUse) {
+                showModalAlert(`Cannot delete status "${itemToRemove}" because it is currently in use by one or more tasks or milestones.`);
               }
+              isInUse = tasksUse || milestonesUse;
             } else if (type === 'froms') {
               isInUse = allTasks.some(task => task.from === itemToRemove);
               if (isInUse) {
@@ -726,6 +764,7 @@ export const UI = (function() {
           <div style="margin-top:8px;display:flex;gap:8px">
             <button id="saveBtn">Save</button>
             <button id="deleteBtn">Delete</button>
+            <button id="openMilestonesBtn">Open Milestones</button> <!-- New Milestone Button -->
           </div>
         </div>
         <aside class="card">
@@ -764,6 +803,7 @@ export const UI = (function() {
 
     area.querySelector('#saveBtn').addEventListener('click', saveTask);
     area.querySelector('#deleteBtn').addEventListener('click', deleteTask);
+    area.querySelector(selectors.openMilestonesBtn).addEventListener('click', () => openMilestonesView(currentTask.id, currentTask.title)); // Event listener for milestones
 
     renderCategoryTags();
     renderAttachments(task);
@@ -946,6 +986,191 @@ export const UI = (function() {
     } catch (e) {
       console.error(e);
       showModalAlert('Error importing file.');
+    }
+  }
+
+  // --- Milestone Features ---
+
+  async function openMilestonesView(taskId, taskTitle) {
+    // Clear any previously selected milestone
+    currentMilestone = null;
+
+    const tmpl = document.getElementById('milestones-view-template').content;
+    const modalFragment = tmpl.cloneNode(true);
+    const modalBackdrop = modalFragment.querySelector('.modal-backdrop');
+    const milestonesGraphContainer = modalFragment.querySelector(selectors.milestonesGraphContainer);
+    const milestoneEditorArea = modalFragment.querySelector(selectors.milestoneEditorArea);
+
+    modalFragment.querySelector(selectors.milestonesTaskTitle).textContent = escapeHtml(taskTitle);
+
+    const addMilestoneBtn = modalFragment.querySelector(selectors.addMilestoneBtn);
+    addMilestoneBtn.addEventListener('click', async () => {
+      const newMilestone = createEmptyMilestone(taskId);
+      await DB.putMilestone(newMilestone); // Save the new milestone
+      openMilestoneEditor(newMilestone, taskId); // Open editor for it
+      renderMilestoneBubbles(taskId, milestonesGraphContainer); // Re-render graph
+    });
+
+    modalFragment.querySelector(selectors.closeMilestonesView).addEventListener('click', () => {
+      document.body.removeChild(modalBackdrop);
+    });
+
+    document.body.appendChild(modalFragment);
+
+    // Initial render of milestones for the task
+    renderMilestoneBubbles(taskId, milestonesGraphContainer);
+
+    // Render an empty editor placeholder initially
+    milestoneEditorArea.innerHTML = '<div class="placeholder">Select a milestone to edit or add a new one.</div>';
+  }
+
+  async function renderMilestoneBubbles(taskId, containerEl) {
+    containerEl.innerHTML = ''; // Clear existing bubbles and SVG
+    const milestones = await DB.getMilestonesForTask(taskId);
+
+    // Sort milestones by creation date to ensure consistent ordering for the graph
+    milestones.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    if (milestones.length === 0) {
+      containerEl.innerHTML = '<div class="placeholder">No milestones yet. Click "+ Add Milestone" to create one.</div>';
+      return;
+    }
+
+    const tmpl = document.getElementById('milestone-bubble-template').content;
+    const bubbleElements = []; // Store references to bubble DOM elements
+
+    milestones.forEach(m => {
+      const node = tmpl.cloneNode(true);
+      const el = node.querySelector('.milestone-bubble');
+      el.dataset.milestoneId = m.id; // Store ID for easy lookup
+      el.querySelector('.milestone-title').textContent = m.title || '(no title)';
+      
+      // Add status class for styling
+      el.classList.add(`status-${m.status.replace(/\s+/g, '-').toLowerCase()}`); // e.g., status-in-progress
+
+      const statusSpan = el.querySelector('.milestone-status');
+      statusSpan.textContent = escapeHtml(m.status);
+
+      if (currentMilestone && currentMilestone.id === m.id) {
+        el.classList.add('selected');
+      }
+
+      el.addEventListener('click', () => openMilestoneEditor(m, taskId));
+      containerEl.appendChild(node);
+      bubbleElements.push(el);
+    });
+
+    // Now, create SVG lines connecting the bubbles
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.classList.add('milestone-graph-svg');
+    containerEl.prepend(svg); // Add SVG first so it's behind the bubbles
+
+    // Use a small timeout to allow bubbles to render and get their dimensions
+    setTimeout(() => {
+        if (bubbleElements.length > 1) {
+            for (let i = 0; i < bubbleElements.length - 1; i++) {
+                const bubble1 = bubbleElements[i];
+                const bubble2 = bubbleElements[i + 1];
+
+                const rect1 = bubble1.getBoundingClientRect();
+                const rect2 = bubble2.getBoundingClientRect();
+                const containerRect = containerEl.getBoundingClientRect();
+
+                // Calculate center points relative to the container
+                const x1 = (rect1.left + rect1.right) / 2 - containerRect.left;
+                const y1 = rect1.bottom - containerRect.top - 5; // Start from bottom of first bubble
+
+                const x2 = (rect2.left + rect2.right) / 2 - containerRect.left;
+                const y2 = rect2.top - containerRect.top + 5; // End at top of second bubble
+
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', x1);
+                line.setAttribute('y1', y1);
+                line.setAttribute('x2', x2);
+                line.setAttribute('y2', y2);
+                line.classList.add('milestone-connector-line');
+                svg.appendChild(line);
+            }
+        }
+    }, 50); // Small delay
+  }
+
+  async function openMilestoneEditor(milestone, taskId) {
+    currentMilestone = milestone; // Set the currently selected milestone
+    const milestoneEditorArea = document.querySelector(selectors.milestoneEditorArea);
+    milestoneEditorArea.innerHTML = ''; // Clear previous editor content
+
+    const tmpl = document.getElementById('milestone-editor-template').content;
+    const node = tmpl.cloneNode(true);
+    milestoneEditorArea.appendChild(node);
+
+    // Populate inputs
+    milestoneEditorArea.querySelector(selectors.milestoneTitleInput).value = escapeHtml(milestone.title);
+    milestoneEditorArea.querySelector(selectors.milestoneDeadlineInput).value = milestone.deadline ? milestone.deadline.split('T')[0] : '';
+    milestoneEditorArea.querySelector(selectors.milestoneFinishDateInput).value = milestone.finishDate ? milestone.finishDate.split('T')[0] : '';
+
+    // Populate status dropdown
+    const statusSelect = milestoneEditorArea.querySelector(selectors.milestoneStatusSelect);
+    statusSelect.innerHTML = statuses.map(s => `<option value="${escapeHtml(s)}" ${s === milestone.status ? 'selected':''}>${escapeHtml(s)}</option>`).join('');
+
+    // Initialize Editor for notes
+    Editor.init(milestoneEditorArea.querySelector(selectors.milestoneNotesEditor));
+    milestoneEditorArea.querySelector(selectors.milestoneNotesEditor + ' .text-area').innerHTML = milestone.notes;
+
+    // Add event listeners
+    milestoneEditorArea.querySelector(selectors.saveMilestoneBtn).addEventListener('click', () => saveMilestone(taskId));
+    milestoneEditorArea.querySelector(selectors.deleteMilestoneBtn).addEventListener('click', () => deleteMilestone(taskId));
+
+    // Deselect all bubbles then select the current one
+    document.querySelectorAll('.milestone-bubble').forEach(b => b.classList.remove('selected'));
+    const selectedBubble = document.querySelector(`.milestone-bubble[data-milestone-id="${milestone.id}"]`);
+    if (selectedBubble) {
+      selectedBubble.classList.add('selected');
+      // Scroll to the selected bubble if it's not fully in view
+      selectedBubble.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  async function saveMilestone(taskId) {
+    if (!currentMilestone) return;
+
+    const milestoneEditorArea = document.querySelector(selectors.milestoneEditorArea);
+    currentMilestone.title = milestoneEditorArea.querySelector(selectors.milestoneTitleInput).value;
+    currentMilestone.deadline = milestoneEditorArea.querySelector(selectors.milestoneDeadlineInput).value || null;
+    currentMilestone.finishDate = milestoneEditorArea.querySelector(selectors.milestoneFinishDateInput).value || null;
+    currentMilestone.status = milestoneEditorArea.querySelector(selectors.milestoneStatusSelect).value;
+    currentMilestone.notes = milestoneEditorArea.querySelector(selectors.milestoneNotesEditor + ' .text-area').innerHTML;
+    currentMilestone.updatedAt = new Date().toISOString();
+
+    await DB.putMilestone(currentMilestone);
+    
+    // Re-render bubbles in the current modal
+    const milestonesGraphContainer = document.querySelector(selectors.milestonesGraphContainer);
+    if (milestonesGraphContainer) {
+      renderMilestoneBubbles(taskId, milestonesGraphContainer);
+    }
+    showModalAlert('Milestone saved!');
+  }
+
+  async function deleteMilestone(taskId) {
+    if (!currentMilestone) return;
+
+    const confirmed = await new Promise(resolve => {
+      showModalAlertConfirm(`Are you sure you want to delete milestone "${currentMilestone.title}"?`, resolve);
+    });
+
+    if (confirmed) {
+      await DB.deleteMilestone(currentMilestone.id);
+      currentMilestone = null; // Clear selected milestone
+      
+      // Clear milestone editor area
+      document.querySelector(selectors.milestoneEditorArea).innerHTML = '<div class="placeholder">Select a milestone to edit or add a new one.</div>';
+
+      // Re-render bubbles in the current modal
+      const milestonesGraphContainer = document.querySelector(selectors.milestonesGraphContainer);
+      if (milestonesGraphContainer) {
+        renderMilestoneBubbles(taskId, milestonesGraphContainer);
+      }
     }
   }
 
