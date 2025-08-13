@@ -23,6 +23,7 @@ const selectors = {
   milestoneNotesEditor: '#milestoneNotesEditor',
   saveMilestoneBtn: '#saveMilestoneBtn',
   deleteMilestoneBtn: '#deleteMilestoneBtn',
+  milestonesGraphContainer: '#milestonesGraphContainer', // Added for direct access
 };
 
 /**
@@ -152,7 +153,8 @@ async function saveMilestone() {
   
   // Re-render bubbles in the current modal using the callback
   if (renderMilestoneBubblesCallback) {
-    const milestonesGraphContainer = document.querySelector(selectors.milestonesGraphContainer); // This selector needs to be accessible in this scope if the graph is open
+    // Find the actual milestonesGraphContainer which should be a parent of the editor area
+    const milestonesGraphContainer = document.querySelector(selectors.milestonesGraphContainer);
     if (milestonesGraphContainer) {
         renderMilestoneBubblesCallback(currentTaskId, milestonesGraphContainer);
     }
@@ -192,6 +194,7 @@ async function deleteMilestone() {
 
     // Re-render bubbles in the current modal
     if (renderMilestoneBubblesCallback) {
+      // Find the actual milestonesGraphContainer which should be a parent of the editor area
       const milestonesGraphContainer = document.querySelector(selectors.milestonesGraphContainer);
       if (milestonesGraphContainer) {
         renderMilestoneBubblesCallback(currentTaskId, milestonesGraphContainer);
