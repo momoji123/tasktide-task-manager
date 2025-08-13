@@ -458,6 +458,20 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial}
     padding: 20px; /* Padding for the entire grid content */
 }
 
+.milestones-view-body-grid.editor-hidden {
+  grid-template-columns: 1fr 0fr; /* Graph takes full width, editor is hidden */
+}
+
+.milestones-view-body-grid.editor-hidden .milestone-editor-area {
+    opacity: 0; /* Fade out content */
+    visibility: hidden; /* Hide completely from interaction */
+    width: 0; /* Collapse width */
+    padding: 0; /* Remove padding */
+    margin: 0; /* Remove margin */
+    overflow: hidden; /* Hide overflow */
+    transition: opacity 0.3s ease, visibility 0.3s ease, width 0.3s ease, padding 0.3s ease;
+}
+
 .milestone-graph-column {
     display: flex;
     flex-direction: column;
@@ -563,6 +577,7 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial}
     overflow-y: auto; /* Enable scrolling for editor content if it overflows */
     border: 1px solid #eef2f7;
     min-height: 250px; /* Ensure editor area has some height */
+    transition: opacity 0.3s ease, visibility 0.3s ease, width 0.3s ease, padding 0.3s ease; /* Ensure transition is applied */
 }
 
 .milestone-editor-card {

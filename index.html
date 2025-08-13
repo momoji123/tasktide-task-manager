@@ -265,7 +265,7 @@
           <h3 id="milestonesViewTitle">Milestones for: <span id="milestonesTaskTitle"></span></h3>
           <button class="modal-close" id="closeMilestonesView">&times;</button>
         </div>
-        <div class="milestones-view-body-grid"> <!-- New grid container for bubbles and editor -->
+        <div class="milestones-view-body-grid editor-hidden"> <!-- New grid container for bubbles and editor -->
           <div class="milestone-graph-column">
             <div class="milestone-controls">
               <button id="addMilestoneBtn">+ Add Milestone</button>
@@ -294,6 +294,12 @@
   <!-- New template for Milestone Editor -->
   <template id="milestone-editor-template">
     <div class="editor milestone-editor-card card">
+      <!-- Add this header with the close button -->
+      <div class="modal-header" style="padding-bottom: 0; margin-bottom: 12px; border-bottom: none;">
+        <h3>Edit Milestone</h3>
+        <button id="closeMilestoneEditorBtn" class="modal-close">&times;</button>
+      </div>
+      
       <div class="label">Title</div>
       <input id="milestoneTitle">
       <div class="date-inputs">

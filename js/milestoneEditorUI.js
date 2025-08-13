@@ -23,7 +23,9 @@ const selectors = {
   milestoneNotesEditor: '#milestoneNotesEditor',
   saveMilestoneBtn: '#saveMilestoneBtn',
   deleteMilestoneBtn: '#deleteMilestoneBtn',
+  closeMilestoneEditorBtn: '#closeMilestoneEditorBtn', // New selector for the close button
   milestonesGraphContainer: '#milestonesGraphContainer', // Added for direct access
+  milestonesPage: '#milestonesPage', // Added to get reference to the main milestones view
 };
 
 /**
@@ -69,6 +71,12 @@ export async function openMilestoneEditor(milestone, taskId) {
   const milestoneEditorArea = document.querySelector(selectors.milestoneEditorArea);
   if (!milestoneEditorArea) return;
 
+  // Show the editor area by removing the 'editor-hidden' class
+  const milestonesPage = document.querySelector(selectors.milestonesPage);
+  if (milestonesPage) {
+    milestonesPage.querySelector('.milestones-view-body-grid').classList.remove('editor-hidden');
+  }
+
   milestoneEditorArea.innerHTML = ''; // Clear previous editor content
 
   const tmpl = document.getElementById('milestone-editor-template')?.content;
@@ -89,8 +97,8 @@ export async function openMilestoneEditor(milestone, taskId) {
   renderStatusSelectOptions(milestoneEditorArea, statuses, milestone.status);
 
   // Populate parent milestone dropdown
-  const parentSelect = milestoneEditorArea.querySelector(selectors.milestoneParentSelect);
   const allMilestones = await DB.getMilestonesForTask(taskId);
+  const parentSelect = milestoneEditorArea.querySelector(selectors.milestoneParentSelect);
   parentSelect.innerHTML = '<option value="">-- No Parent Milestone --</option>' + 
                            allMilestones
                              .filter(m => m.id !== milestone.id) // Cannot be its own parent
@@ -105,6 +113,7 @@ export async function openMilestoneEditor(milestone, taskId) {
   // Add event listeners
   milestoneEditorArea.querySelector(selectors.saveMilestoneBtn)?.addEventListener('click', saveMilestone);
   milestoneEditorArea.querySelector(selectors.deleteMilestoneBtn)?.addEventListener('click', deleteMilestone);
+  milestoneEditorArea.querySelector(selectors.closeMilestoneEditorBtn)?.addEventListener('click', closeMilestoneEditor); // Attach listener for the new close button
 
   // Deselect all bubbles then select the current one in the graph
   document.querySelectorAll('.milestone-bubble').forEach(b => b.classList.remove('selected'));
@@ -168,7 +177,9 @@ async function saveMilestone() {
  * Deletes the current milestone from IndexedDB.
  */
 async function deleteMilestone() {
-  if (!currentMilestone || !currentTaskId) return;
+  if (!currentMilestone || !currentTaskId) {
+    return;
+  }
 
   // Before deleting, check if this milestone is a parent to any other milestones
   const allMilestones = await DB.getMilestonesForTask(currentTaskId);
@@ -201,5 +212,34 @@ async function deleteMilestone() {
       }
     }
     showModalAlert('Milestone deleted!');
+    milestonesPage.querySelector('.milestones-view-body-grid').classList.add('editor-hidden');
+  }
+}
+
+/**
+ * Clears the milestone editor area and deselects any milestone in the graph.
+ */
+function closeMilestoneEditor() {
+  currentMilestone = null; // Clear selected milestone
+  if (updateCurrentMilestoneCallback) updateCurrentMilestoneCallback(null); // Inform graph UI no milestone is selected
+
+  // Hide the editor area by adding the 'editor-hidden' class
+  const milestonesPage = document.querySelector(selectors.milestonesPage);
+  if (milestonesPage) {
+    milestonesPage.querySelector('.milestones-view-body-grid').classList.add('editor-hidden');
+  }
+
+  // Clear milestone editor area content
+  const milestoneEditorArea = document.querySelector(selectors.milestoneEditorArea);
+  if (milestoneEditorArea) {
+    milestoneEditorArea.innerHTML = '<div class="placeholder">Select a milestone to edit or add a new one.</div>';
+  }
+
+  // Deselect all bubbles in the graph
+  // This needs to specifically target bubbles within the visible graph container,
+  // in case there are other '.milestone-bubble' elements elsewhere.
+  const graphContainer = document.querySelector(selectors.milestonesGraphContainer);
+  if (graphContainer) {
+      graphContainer.querySelectorAll('.milestone-bubble').forEach(b => b.classList.remove('selected'));
   }
 }
