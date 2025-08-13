@@ -451,7 +451,7 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial}
 
 .milestones-view-body-grid {
     display: grid;
-    grid-template-columns: 1fr 2fr; /* Left for graph, right for editor */
+    grid-template-columns: 1fr 2fr; /* Left for graph (1fr), right for editor (2fr) */
     gap: 20px;
     flex-grow: 1; /* Allow body to take available space */
     overflow: hidden; /* Prevent overall scrollbars on the grid itself */

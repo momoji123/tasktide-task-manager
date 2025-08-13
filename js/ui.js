@@ -48,6 +48,7 @@ export const UI = (function() {
   let froms = [];
   let filterSectionVisible = true; // Default state for filter section visibility
   let selectedFilterCategories = []; // New state for multi-select categories filter
+  let resizeListener = null; // To hold the resize event listener
 
   // Helper function for creating a modal
   function createModal(title, contentHtml, showSaveButton = true) {
@@ -944,9 +945,16 @@ export const UI = (function() {
   }
 
   async function exportJSON() {
-    const all = await DB.getAllTasks();
+    const allTasks = await DB.getAllTasks();
+    
+    // Fetch all milestones and attach them to their respective tasks
+    const tasksWithMilestones = await Promise.all(allTasks.map(async (task) => {
+      const milestones = await DB.getMilestonesForTask(task.id);
+      return { ...task, milestones: milestones };
+    }));
+
     const data = {
-        tasks: all,
+        tasks: tasksWithMilestones, // Include tasks with nested milestones
         categories: categories,
         statuses: statuses,
         froms: froms
@@ -974,7 +982,16 @@ export const UI = (function() {
       
       if (j.tasks) {
         for (const t of j.tasks) {
+          // Temporarily extract milestones if they exist
+          const milestonesToImport = t.milestones || [];
+          // Remove milestones property from task before saving the task itself
+          delete t.milestones; 
           await DB.putTask(t);
+
+          // Save associated milestones
+          for (const m of milestonesToImport) {
+            await DB.putMilestone(m);
+          }
         }
       }
       await DB.putMeta('categories', categories);
@@ -984,9 +1001,10 @@ export const UI = (function() {
       renderFilterCategoriesMultiSelect(); // Re-render the multi-select filter
       renderStatusOptions();
       await renderTaskList();
+      showModalAlert('Import successful!');
     } catch (e) {
       console.error(e);
-      showModalAlert('Error importing file.');
+      showModalAlert('Error importing file. Please ensure it is a valid task export JSON.');
     }
   }
 
@@ -1000,8 +1018,8 @@ export const UI = (function() {
     const modalFragment = tmpl.cloneNode(true);
     // Change from modalBackdrop to milestonesPage to indicate full-screen usage
     const milestonesPage = modalFragment.querySelector(selectors.milestonesPage); 
-    const milestonesGraphContainer = modalFragment.querySelector(selectors.milestonesGraphContainer);
-    const milestoneEditorArea = modalFragment.querySelector(selectors.milestoneEditorArea);
+    const milestonesGraphContainer = milestonesPage.querySelector(selectors.milestonesGraphContainer);
+    const milestoneEditorArea = milestonesPage.querySelector(selectors.milestoneEditorArea);
 
     milestonesPage.querySelector(selectors.milestonesTaskTitle).textContent = escapeHtml(taskTitle);
 
@@ -1015,12 +1033,29 @@ export const UI = (function() {
 
     milestonesPage.querySelector(selectors.closeMilestonesView).addEventListener('click', () => {
       document.body.removeChild(milestonesPage); // Remove the full-screen page
+      // Remove the resize listener when closing the milestone view
+      if (resizeListener) {
+        window.removeEventListener('resize', resizeListener);
+        resizeListener = null;
+      }
     });
 
     document.body.appendChild(milestonesPage); // Append the full-screen page
 
     // Initial render of milestones for the task
     renderMilestoneBubbles(taskId, milestonesGraphContainer);
+
+    // Add resize listener for dynamic SVG line updates
+    // Debounce the resize event for performance
+    let resizeTimer;
+    resizeListener = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        renderMilestoneBubbles(taskId, milestonesGraphContainer);
+      }, 100); // Debounce for 100ms
+    };
+    window.addEventListener('resize', resizeListener);
+
 
     // Render an empty editor placeholder initially
     milestoneEditorArea.innerHTML = '<div class="placeholder">Select a milestone to edit or add a new one.</div>';
@@ -1068,7 +1103,12 @@ export const UI = (function() {
     containerEl.prepend(svg); // Add SVG first so it's behind the bubbles
 
     // Use a small timeout to allow bubbles to render and get their dimensions
+    // This is crucial for correct positioning after dynamic layout changes (like resizing)
     setTimeout(() => {
+        // Ensure the SVG is sized correctly to the container before calculating positions
+        svg.setAttribute('width', containerEl.offsetWidth);
+        svg.setAttribute('height', containerEl.offsetHeight);
+
         if (bubbleElements.length > 1) {
             for (let i = 0; i < bubbleElements.length - 1; i++) {
                 const bubble1 = bubbleElements[i];
@@ -1078,12 +1118,15 @@ export const UI = (function() {
                 const rect2 = bubble2.getBoundingClientRect();
                 const containerRect = containerEl.getBoundingClientRect();
 
-                // Calculate center points relative to the container
-                const x1 = (rect1.left + rect1.right) / 2 - containerRect.left;
-                const y1 = rect1.bottom - containerRect.top - 5; // Start from bottom of first bubble
+                // Calculate center points relative to the container, accounting for scroll
+                const scrollLeft = containerEl.scrollLeft;
+                const scrollTop = containerEl.scrollTop;
 
-                const x2 = (rect2.left + rect2.right) / 2 - containerRect.left;
-                const y2 = rect2.top - containerRect.top + 5; // End at top of second bubble
+                const x1 = (rect1.left + rect1.right) / 2 - containerRect.left + scrollLeft;
+                const y1 = rect1.bottom - containerRect.top + scrollTop - 5; // Start from bottom of first bubble
+
+                const x2 = (rect2.left + rect2.right) / 2 - containerRect.left + scrollLeft;
+                const y2 = rect2.top - containerRect.top + scrollTop + 5; // End at top of second bubble
 
                 const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
                 line.setAttribute('x1', x1);
@@ -1094,7 +1137,7 @@ export const UI = (function() {
                 svg.appendChild(line);
             }
         }
-    }, 50); // Small delay
+    }, 50); // Small delay to allow DOM to settle before calculating positions
   }
 
   async function openMilestoneEditor(milestone, taskId) {
