@@ -50,7 +50,6 @@
     .filters-collapsible {
       /* This ensures the content itself is visible within its parent container */
       display: block; 
-      height: 100%; /* Take full height of its container */
       overflow-y: auto; /* Enable scrolling for content if it overflows */
     }
 
@@ -103,7 +102,7 @@
 <body>
   <div id="app" class="app">
     <aside class="sidebar">
-      <h1>PrismTask</h1>
+      <h1><img src="assets/logo.png" alt="PrismTask Logo" style="max-width: 100%;"></h1>
       <div class="controls">
         <button id="newTaskBtn">+ New Task</button>
         <input id="searchInput" type="search" placeholder="Search title, from, description, notes...">
