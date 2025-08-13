@@ -38,6 +38,7 @@ export const UI = (function() {
     milestoneNotesEditor: '#milestoneNotesEditor',
     saveMilestoneBtn: '#saveMilestoneBtn',
     deleteMilestoneBtn: '#deleteMilestoneBtn',
+    milestonesPage: '#milestonesPage', // New selector for the full-screen milestone page
   };
 
   let currentTask = null;
@@ -997,13 +998,14 @@ export const UI = (function() {
 
     const tmpl = document.getElementById('milestones-view-template').content;
     const modalFragment = tmpl.cloneNode(true);
-    const modalBackdrop = modalFragment.querySelector('.modal-backdrop');
+    // Change from modalBackdrop to milestonesPage to indicate full-screen usage
+    const milestonesPage = modalFragment.querySelector(selectors.milestonesPage); 
     const milestonesGraphContainer = modalFragment.querySelector(selectors.milestonesGraphContainer);
     const milestoneEditorArea = modalFragment.querySelector(selectors.milestoneEditorArea);
 
-    modalFragment.querySelector(selectors.milestonesTaskTitle).textContent = escapeHtml(taskTitle);
+    milestonesPage.querySelector(selectors.milestonesTaskTitle).textContent = escapeHtml(taskTitle);
 
-    const addMilestoneBtn = modalFragment.querySelector(selectors.addMilestoneBtn);
+    const addMilestoneBtn = milestonesPage.querySelector(selectors.addMilestoneBtn);
     addMilestoneBtn.addEventListener('click', async () => {
       const newMilestone = createEmptyMilestone(taskId);
       await DB.putMilestone(newMilestone); // Save the new milestone
@@ -1011,11 +1013,11 @@ export const UI = (function() {
       renderMilestoneBubbles(taskId, milestonesGraphContainer); // Re-render graph
     });
 
-    modalFragment.querySelector(selectors.closeMilestonesView).addEventListener('click', () => {
-      document.body.removeChild(modalBackdrop);
+    milestonesPage.querySelector(selectors.closeMilestonesView).addEventListener('click', () => {
+      document.body.removeChild(milestonesPage); // Remove the full-screen page
     });
 
-    document.body.appendChild(modalFragment);
+    document.body.appendChild(milestonesPage); // Append the full-screen page
 
     // Initial render of milestones for the task
     renderMilestoneBubbles(taskId, milestonesGraphContainer);

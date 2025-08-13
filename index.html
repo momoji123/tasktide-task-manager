@@ -257,20 +257,22 @@
     </div>
   </template>
 
-  <!-- New template for the Milestones View Modal -->
+  <!-- New template for the Milestones View (now full-screen) -->
   <template id="milestones-view-template">
-    <div class="modal-backdrop">
-      <div class="milestones-modal-content modal-content"> <!-- Use modal-content for base styling -->
+    <div class="fullscreen-modal-backdrop" id="milestonesPage">
+      <div class="fullscreen-modal-content">
         <div class="modal-header">
           <h3 id="milestonesViewTitle">Milestones for: <span id="milestonesTaskTitle"></span></h3>
           <button class="modal-close" id="closeMilestonesView">&times;</button>
         </div>
-        <div class="modal-body milestones-view-body">
-          <div class="milestone-controls">
-            <button id="addMilestoneBtn">+ Add Milestone</button>
-          </div>
-          <div id="milestonesGraphContainer" class="milestone-graph-container">
-            <!-- Milestones will be rendered here as bubbles with SVG lines -->
+        <div class="milestones-view-body-grid"> <!-- New grid container for bubbles and editor -->
+          <div class="milestone-graph-column">
+            <div class="milestone-controls">
+              <button id="addMilestoneBtn">+ Add Milestone</button>
+            </div>
+            <div id="milestonesGraphContainer" class="milestone-graph-container">
+              <!-- Milestones will be rendered here as bubbles with SVG lines -->
+            </div>
           </div>
           <div id="milestoneEditorArea" class="milestone-editor-area">
             <!-- Milestone editor will be displayed here -->

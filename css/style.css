@@ -218,7 +218,7 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial}
   background-color: #f9f9f9;
   min-width: 160px;
   box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-  z-index: 1001; /* Ensure dropdown is above other content */
+  z-index: 1001; /* Higher than settings dropdown */
   right: 0;
   border-radius: 6px;
   overflow: hidden;
@@ -425,26 +425,54 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial}
 }
 
 /* New styles for Milestones */
-.milestones-modal-content {
-    max-width: 900px; /* Wider modal for milestones */
-    width: 95%;
+/* Full-screen backdrop for the milestone page */
+.fullscreen-modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg); /* Use a softer background */
     display: flex;
-    flex-direction: column;
-    max-height: 90vh; /* Limit height to viewport */
+    justify-content: center;
+    align-items: center;
+    z-index: 1000; /* Ensure it's on top */
 }
 
-.milestones-view-body {
+.fullscreen-modal-content {
+    background-color: white;
+    width: 100%;
+    height: 100%;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    border-radius: 0; /* No rounded corners for full screen */
+    box-shadow: none; /* No shadow for full screen */
+}
+
+.milestones-view-body-grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr; /* Left for graph, right for editor */
+    gap: 20px;
     flex-grow: 1; /* Allow body to take available space */
-    overflow: hidden; /* Hide scrollbars for the overall body */
+    overflow: hidden; /* Prevent overall scrollbars on the grid itself */
+    padding: 20px; /* Padding for the entire grid content */
+}
+
+.milestone-graph-column {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--card);
+    border-radius: 8px;
+    padding: 16px;
+    border: 1px solid #eef2f7;
+    overflow: hidden; /* Hide overflow from the graph container below */
 }
 
 .milestone-controls {
     display: flex;
     justify-content: flex-end; /* Align add button to the right */
     padding-bottom: 8px;
+    margin-bottom: 10px;
     border-bottom: 1px solid #eef2f7;
 }
 
