@@ -53,9 +53,9 @@ export async function openMilestonesView(taskId, taskTitle) {
     return;
   }
   const modalFragment = tmpl.cloneNode(true);
-  
+
   // Get references to key elements within the cloned template
-  const milestonesPage = modalFragment.querySelector(selectors.milestonesPage); 
+  const milestonesPage = modalFragment.querySelector(selectors.milestonesPage);
   const milestonesGraphContainer = milestonesPage?.querySelector(selectors.milestonesGraphContainer);
   const milestoneEditorArea = milestonesPage?.querySelector(selectors.milestoneEditorArea);
 
@@ -72,7 +72,7 @@ export async function openMilestonesView(taskId, taskTitle) {
     await DB.putMilestone(newMilestone); // Save the new milestone
     // Now that milestone is saved, open editor and re-render graph
     if (openMilestoneEditorCallback) {
-      openMilestoneEditorCallback(newMilestone, taskId); 
+      openMilestoneEditorCallback(newMilestone, taskId);
     }
     renderMilestoneBubbles(taskId, milestonesGraphContainer); // Re-render graph
   });
@@ -130,6 +130,8 @@ function createEmptyMilestone(taskId) {
 
 /**
  * Renders the milestone bubbles and SVG lines representing dependencies.
+ * Implements a layered graph layout to ensure children are below parents
+ * and minimize line crossings by dynamically calculating positions.
  * @param {string} taskId - The ID of the task whose milestones are being rendered.
  * @param {HTMLElement} containerEl - The container element for the graph.
  */
@@ -143,147 +145,274 @@ export async function renderMilestoneBubbles(taskId, containerEl) {
     return;
   }
 
-  // Create a map for quick lookup of milestones by ID
-  const milestoneMap = new Map(); // milestoneId -> milestone object
-  const childrenMap = new Map(); // parentId -> [child1, child2, ...]
+  // --- Graph Data Structure Setup ---
+  const milestoneMap = new Map();     // id -> milestone object
+  const childrenMap = new Map();      // parentId -> [child milestone objects]
+  const parentMap = new Map();        // childId -> parent milestone object (only one parent supported by data model)
+  const rootMilestones = [];          // Milestones with no valid parent
 
+  // Populate milestoneMap and initialize childrenMap
   milestones.forEach(m => {
-      milestoneMap.set(m.id, m);
-      // Ensure parentId is valid and exists in the current set of milestones
-      if (m.parentId && milestoneMap.has(m.parentId)) {
-          if (!childrenMap.has(m.parentId)) {
-              childrenMap.set(m.parentId, []);
-          }
-          childrenMap.get(m.parentId).push(m);
-      } else {
-        // If parentId is invalid or points to a non-existent milestone, treat as root
-        m.parentId = null;
-      }
+    milestoneMap.set(m.id, m);
+    childrenMap.set(m.id, []); // Initialize children array for all milestones
   });
 
-  // Determine levels of all milestones using BFS
-  const levelMap = new Map(); // milestoneId -> level
+  // Build childrenMap, parentMap, and identify root milestones
+  milestones.forEach(m => {
+    // If parentId is set and the parent exists in the current milestone set
+    if (m.parentId && milestoneMap.has(m.parentId)) {
+      childrenMap.get(m.parentId).push(m);
+      parentMap.set(m.id, milestoneMap.get(m.parentId));
+    } else {
+      rootMilestones.push(m);
+    }
+  });
+
+  // --- Level Assignment (Vertical Positioning) using BFS ---
+  // Assigns each milestone to a 'level' based on its distance from a root.
+  // This determines the Y-coordinate.
+  const levelMap = new Map();     // milestoneId -> level_number
+  const levels = new Map();       // level_number -> [milestone_ids (ordered)]
   const queue = [];
 
-  // Find root milestones (no parent, or parent doesn't exist in current set)
-  milestones.forEach(m => {
-      if (!m.parentId || !milestoneMap.has(m.parentId)) {
-          levelMap.set(m.id, 0);
-          queue.push(m.id);
-      }
+  // Sort root milestones for consistent initial horizontal ordering
+  rootMilestones.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  // Initialize queue with roots and assign them level 0
+  rootMilestones.forEach(m => {
+    levelMap.set(m.id, 0);
+    queue.push(m.id);
+    if (!levels.has(0)) levels.set(0, []);
+    levels.get(0).push(m.id);
   });
 
   let head = 0;
-  while(head < queue.length) {
-      const currentMilestoneId = queue[head++];
-      const currentLevel = levelMap.get(currentMilestoneId);
-      const children = childrenMap.get(currentMilestoneId) || [];
-      children.forEach(child => {
-          if (!levelMap.has(child.id)) { // Avoid reprocessing and infinite loops in case of cycles (though cycles shouldn't be allowed in data entry)
-              levelMap.set(child.id, currentLevel + 1);
-              queue.push(child.id);
+  let maxLevel = 0;
+  while (head < queue.length) {
+    const currentId = queue[head++];
+    const currentLevel = levelMap.get(currentId);
+    maxLevel = Math.max(maxLevel, currentLevel);
+
+    const children = childrenMap.get(currentId) || [];
+    // Sort children for consistent horizontal ordering within a parent's group
+    children.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+    children.forEach(child => {
+      // Only process if child hasn't been assigned a level yet (prevents infinite loops for cycles)
+      if (!levelMap.has(child.id)) {
+        levelMap.set(child.id, currentLevel + 1);
+        queue.push(child.id);
+        if (!levels.has(currentLevel + 1)) levels.set(currentLevel + 1, []);
+        levels.get(currentLevel + 1).push(child.id);
+      }
+    });
+  }
+
+  // --- Layout Constants (adjust for desired spacing and estimated bubble size) ---
+  const estimatedBubbleWidth = 200;
+  const estimatedBubbleHeight = 80;
+  const horizontalSpacing = 60;   // Space between bubbles horizontally
+  const verticalSpacing = 120;    // Space between levels vertically
+  const paddingLeft = 40;         // Left padding for the entire graph
+  const paddingTop = 40;          // Top padding for the entire graph
+
+  const nodePositions = new Map(); // milestoneId -> { x, y, width, height }
+
+  // First pass: Initialize positions and calculate preliminary widths for each level
+  // This helps in distributing space more evenly.
+  const levelWidths = new Map(); // level -> total width needed for this level
+  for (let l = 0; l <= maxLevel; l++) {
+      const levelMilestonesIds = levels.get(l) || [];
+      let currentLevelCalculatedWidth = 0;
+      levelMilestonesIds.forEach(id => {
+          nodePositions.set(id, {
+              x: 0, // Will be set later
+              y: l * (estimatedBubbleHeight + verticalSpacing) + paddingTop,
+              width: estimatedBubbleWidth,
+              height: estimatedBubbleHeight
+          });
+          currentLevelCalculatedWidth += estimatedBubbleWidth + horizontalSpacing;
+      });
+      levelWidths.set(l, currentLevelCalculatedWidth - horizontalSpacing); // Remove last spacing
+  }
+
+  // Second pass: Recursive layout to position nodes horizontally
+  // This aims to center children under parents and manage overlaps.
+  function layoutNode(milestoneId, currentXOffset) {
+      const milestone = milestoneMap.get(milestoneId);
+      if (!milestone) return 0; // Should not happen
+
+      const children = childrenMap.get(milestoneId);
+      let totalChildrenWidth = 0;
+
+      if (children && children.length > 0) {
+          // Recursively layout children first to determine their positions and total width
+          children.forEach(child => {
+              totalChildrenWidth += layoutNode(child.id, currentXOffset + totalChildrenWidth);
+          });
+
+          // If children exist, position parent over the center of its children
+          let leftmostChildX = Infinity;
+          let rightmostChildX = -Infinity;
+          children.forEach(child => {
+              const childPos = nodePositions.get(child.id);
+              leftmostChildX = Math.min(leftmostChildX, childPos.x);
+              rightmostChildX = Math.max(rightmostChildX, childPos.x + childPos.width);
+          });
+          const centerOfChildrenX = (leftmostChildX + rightmostChildX) / 2;
+
+          const parentPos = nodePositions.get(milestoneId);
+          parentPos.x = centerOfChildrenX - (parentPos.width / 2); // Center parent above children
+          nodePositions.set(milestoneId, parentPos);
+
+      } else {
+          // If no children, just place the node at the current offset
+          const pos = nodePositions.get(milestoneId);
+          pos.x = currentXOffset;
+          nodePositions.set(milestoneId, pos);
+          totalChildrenWidth = pos.width + horizontalSpacing; // For leaves, contribute their own width
+      }
+
+      return totalChildrenWidth;
+  }
+
+  // Start layout from root milestones
+  let currentRootX = paddingLeft;
+  rootMilestones.forEach(root => {
+      currentRootX += layoutNode(root.id, currentRootX);
+  });
+
+  // Third Pass: Collision resolution and final positioning within levels
+  // Adjusts positions to ensure no overlaps and maintain minimum spacing.
+  for (let l = 0; l <= maxLevel; l++) {
+      const currentLevelMilestonesIds = levels.get(l) || [];
+      // Sort by current X position to process from left to right
+      currentLevelMilestonesIds.sort((a, b) => nodePositions.get(a).x - nodePositions.get(b).x);
+
+      let currentX = paddingLeft;
+      currentLevelMilestonesIds.forEach(id => {
+          const pos = nodePositions.get(id);
+          if (pos) {
+              // Ensure node is not placed to the left of the minimum required X for this level
+              pos.x = Math.max(pos.x, currentX);
+              nodePositions.set(id, pos);
+              currentX = pos.x + pos.width + horizontalSpacing;
           }
       });
   }
 
-  // Group milestones by level
-  const milestonesByLevel = new Map(); // level -> [milestone1, milestone2, ...]
-  milestones.forEach(m => {
-      const level = levelMap.has(m.id) ? levelMap.get(m.id) : 0; // Default to level 0 if not reachable from a root (orphan)
-      if (!milestonesByLevel.has(level)) {
-          milestonesByLevel.set(level, []);
-      }
-      milestonesByLevel.get(level).push(m);
-  });
-
-  // Sort milestones within each level (e.g., by creation date for consistency)
-  Array.from(milestonesByLevel.values()).forEach(levelMilestones => {
-      levelMilestones.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  });
-
+  // --- Render Bubbles and Collect Actual Dimensions ---
   const tmpl = document.getElementById('milestone-bubble-template')?.content;
   if (!tmpl) {
     console.error('Milestone bubble template not found!');
     return;
   }
-  const bubbleElements = {}; // Store references to bubble DOM elements by ID
+  const elements = new Map(); // milestoneId -> DOM element reference
 
-  // Render structure level by level
-  const sortedLevels = Array.from(milestonesByLevel.keys()).sort((a, b) => a - b);
-  sortedLevels.forEach(level => {
-      const levelRow = document.createElement('div');
-      levelRow.classList.add('milestone-level-row');
-      milestonesByLevel.get(level).forEach(milestone => {
-          const node = tmpl.cloneNode(true);
-          const el = node.querySelector('.milestone-bubble');
-          if (!el) return;
+  let graphMaxX = 0;
+  let graphMaxY = 0;
 
-          el.dataset.milestoneId = milestone.id; // Store ID for easy lookup
-          el.querySelector('.milestone-title').textContent = milestone.title || '(no title)';
-          
-          // Add status class for styling
-          el.classList.add(`status-${milestone.status.replace(/\s+/g, '-').toLowerCase()}`); // e.g., status-in-progress
+  // Render all bubbles using calculated positions (x, y)
+  for (const [milestoneId, pos] of nodePositions.entries()) {
+    const milestone = milestoneMap.get(milestoneId);
+    if (!milestone) continue;
 
-          const statusSpan = el.querySelector('.milestone-status');
-          statusSpan.textContent = escapeHtml(milestone.status);
+    const node = tmpl.cloneNode(true);
+    const el = node.querySelector('.milestone-bubble');
+    if (!el) continue;
 
-          // Highlight the currently selected milestone
-          if (currentMilestone && currentMilestone.id === milestone.id) {
-              el.classList.add('selected');
-          }
+    el.dataset.milestoneId = milestone.id; // Store ID for easy lookup
+    el.querySelector('.milestone-title').textContent = escapeHtml(milestone.title) || '(no title)';
 
-          el.addEventListener('click', () => {
-            if (openMilestoneEditorCallback) openMilestoneEditorCallback(milestone, taskId);
-          });
-          levelRow.appendChild(el);
-          bubbleElements[milestone.id] = el; // Store element by milestone ID
-      });
-      containerEl.appendChild(levelRow);
-  });
+    // Add status class for styling (e.g., status-in-progress)
+    el.classList.add(`status-${milestone.status.replace(/\s+/g, '-').toLowerCase()}`);
+
+    const statusSpan = el.querySelector('.milestone-status');
+    statusSpan.textContent = escapeHtml(milestone.status);
+
+    // Highlight the currently selected milestone
+    if (currentMilestone && currentMilestone.id === milestone.id) {
+      el.classList.add('selected');
+    }
+
+    // Set absolute position based on calculated x, y
+    el.style.position = 'absolute';
+    el.style.left = pos.x + 'px';
+    el.style.top = pos.y + 'px';
+
+    el.addEventListener('click', () => {
+      if (openMilestoneEditorCallback) openMilestoneEditorCallback(milestone, taskId);
+    });
+
+    containerEl.appendChild(el); // Append bubble directly to the graph container
+    elements.set(milestoneId, el);
+
+    // Update max dimensions of the graph based on initial estimates.
+    // Actual dimensions will be used for lines after rendering.
+    graphMaxX = Math.max(graphMaxX, pos.x + estimatedBubbleWidth + paddingLeft);
+    graphMaxY = Math.max(graphMaxY, pos.y + estimatedBubbleHeight + paddingTop);
+  }
+
+  // Set container size to fit all content, allowing scroll
+  containerEl.style.position = 'relative'; // Ensure container is positioned for absolute children
+  // Removed minWidth and minHeight to allow natural scrolling
+  // containerEl.style.minWidth = graphMaxX + 'px';
+  // containerEl.style.minHeight = graphMaxY + 'px';
 
 
-  // Now, create SVG lines connecting the bubbles based on parentId
+  // Create SVG layer for lines
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.classList.add('milestone-graph-svg');
   containerEl.prepend(svg); // Add SVG first so it's behind the bubbles
 
-  // Use a small timeout to allow bubbles to render and get their dimensions
+  // Use a small timeout to allow bubbles to render and get their actual dimensions
   // This is crucial for correct positioning after dynamic layout changes (like resizing)
   setTimeout(() => {
-      // Ensure the SVG is sized correctly to the container before calculating positions
-      svg.setAttribute('width', containerEl.offsetWidth);
-      svg.setAttribute('height', containerEl.offsetHeight);
+    // Update stored dimensions with actual rendered sizes
+    for (const [milestoneId, el] of elements.entries()) {
+      const rect = el.getBoundingClientRect();
+      const currentPos = nodePositions.get(milestoneId);
+      if (currentPos) {
+        currentPos.width = rect.width;
+        currentPos.height = rect.height;
+        nodePositions.set(milestoneId, currentPos);
+      }
+    }
 
-      milestones.forEach(milestone => {
-          const parentId = milestone.parentId;
-          if (parentId && bubbleElements[parentId] && bubbleElements[milestone.id]) {
-              const parentBubble = bubbleElements[parentId];
-              const childBubble = bubbleElements[milestone.id];
+    // Ensure the SVG is sized correctly to cover the full scrollable area
+    svg.setAttribute('width', containerEl.scrollWidth);
+    svg.setAttribute('height', containerEl.scrollHeight);
 
-              const parentRect = parentBubble.getBoundingClientRect();
-              const childRect = childBubble.getBoundingClientRect();
-              const containerRect = containerEl.getBoundingClientRect();
+    // Draw lines using actual, updated positions
+    milestones.forEach(milestone => {
+      const parentMilestone = parentMap.get(milestone.id); // Get the actual parent object
+      if (parentMilestone && elements.has(parentMilestone.id) && elements.has(milestone.id)) {
+        const parentPos = nodePositions.get(parentMilestone.id);
+        const childPos = nodePositions.get(milestone.id);
 
-              // Calculate center points relative to the container, accounting for scroll
-              const scrollLeft = containerEl.scrollLeft;
-              const scrollTop = containerEl.scrollTop;
+        if (!parentPos || !childPos) return; // Should not happen if `elements.has` passed
 
-              // Start point: bottom-center of parent bubble
-              const x1 = (parentRect.left + parentRect.right) / 2 - containerRect.left + scrollLeft;
-              const y1 = parentRect.bottom - containerRect.top + scrollTop + 5; // Offset slightly below parent
+        // Calculate connector points relative to the SVG, which covers the container
+        // These are already "absolute" within the container's coordinate system
+        const x1 = parentPos.x + (parentPos.width / 2); // Center of parent bubble
+        const y1 = parentPos.y + parentPos.height + 5; // Slightly below parent bubble
 
-              // End point: top-center of child bubble
-              const x2 = (childRect.left + childRect.right) / 2 - containerRect.left + scrollLeft;
-              const y2 = childRect.top - containerRect.top + scrollTop - 5; // Offset slightly above child
+        const x2 = childPos.x + (childPos.width / 2); // Center of child bubble
+        const y2 = childPos.y - 5; // Slightly above child bubble
 
-              const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-              line.setAttribute('x1', x1);
-              line.setAttribute('y1', y1);
-              line.setAttribute('x2', x2);
-              line.setAttribute('y2', y2);
-              line.classList.add('milestone-connector-line');
-              svg.appendChild(line);
-          }
-      });
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', x1);
+        line.setAttribute('y1', y1);
+        line.setAttribute('x2', x2);
+        line.setAttribute('y2', y2);
+        line.classList.add('milestone-connector-line');
+        svg.appendChild(line);
+      }
+    });
+
+    // Scroll to the currently selected milestone if it exists
+    if (currentMilestone && elements.has(currentMilestone.id)) {
+      elements.get(currentMilestone.id).scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+    }
   }, 50); // Small delay to allow DOM to settle before calculating positions
 }

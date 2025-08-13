@@ -480,32 +480,17 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial}
     flex-grow: 1; /* Allow graph to take available vertical space */
     overflow-y: auto; /* Enable scrolling for the graph */
     overflow-x: auto; /* Enable horizontal scrolling for the graph */
-    display: flex;
-    flex-direction: column; /* Stack levels vertically */
-    align-items: flex-start; /* Align levels to the start horizontally for proper scrolling */
-    position: relative; /* For positioning SVG lines */
+    position: relative; /* Essential for absolute positioning of bubbles and SVG lines */
     padding: 20px; /* Padding for the graph area */
 }
 
-/* New style for horizontal arrangement of child milestones */
-.milestone-level-row {
-    display: flex;
-    flex-direction: row; /* Arrange items horizontally */
-    justify-content: flex-start; /* Align items to the start of the row */
-    align-items: flex-start; /* Align children to the top of their row */
-    flex-wrap: nowrap; /* Prevent wrapping */
-    gap: 30px; /* Horizontal spacing between bubbles in a row */
-    margin-bottom: 40px; /* Vertical spacing between levels */
-    min-width: fit-content; /* Allow row to expand horizontally beyond container width */
-}
-
+/* Removed .milestone-level-row as bubbles are now absolutely positioned */
 
 .milestone-graph-svg {
     position: absolute;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
+    /* width and height will be set dynamically in JS to cover content */
     pointer-events: none; /* Allow clicks to pass through to bubbles */
     z-index: 1; /* Below bubbles */
 }
@@ -520,7 +505,6 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial}
     border: 2px solid var(--muted);
     border-radius: 20px; /* More rounded, pill-like shape */
     padding: 8px 15px;
-    /* margin: 15px 0; Removed margin to let flex gap control spacing */
     text-align: center;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     cursor: pointer;
@@ -528,7 +512,7 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial}
     min-width: 150px; /* Minimum width for readability */
     max-width: 250px; /* Max width to prevent overly long bubbles */
     z-index: 2; /* Above SVG lines */
-    position: relative; /* For accurate positioning */
+    /* Position will be set by JS */
     display: flex;
     flex-direction: column;
     justify-content: center;
