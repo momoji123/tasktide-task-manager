@@ -1,0 +1,447 @@
+// leftMenuTaskUI.js
+// This module manages the left sidebar, including task list rendering,
+// search, filtering (category, status, date ranges), sorting, and grouping.
+
+import { DB } from './storage.js';
+import { escapeHtml } from './utilUI.js';
+
+// Internal state, initialized by the main UI module
+let categories = [];
+let statuses = [];
+let filterSectionVisible = true;
+let selectedFilterCategories = [];
+let openTaskEditorCallback = null; // Callback to open the task editor
+
+const selectors = {
+  newTaskBtn: '#newTaskBtn',
+  searchInput: '#searchInput',
+  taskList: '#taskList',
+  filterCategoryMultiSelect: '#filterCategoryMultiSelect',
+  filterCategoryHeader: '#filterCategoryMultiSelect .multi-select-header',
+  selectedFilterCategoriesDisplay: '#selectedFilterCategoriesDisplay',
+  filterCategoryDropdownContent: '#filterCategoryDropdownContent',
+  filterStatus: '#filterStatus',
+  sortBy: '#sortBy',
+  groupBy: '#groupBy',
+  createdRangeFrom: '#createdRangeFrom',
+  createdRangeTo: '#createdRangeTo',
+  updatedRangeFrom: '#updatedRangeFrom',
+  updatedRangeTo: '#updatedRangeTo',
+  deadlineRangeFrom: '#deadlineRangeFrom',
+  deadlineRangeTo: '#deadlineRangeTo',
+  finishedRangeFrom: '#finishedRangeFrom',
+  finishedRangeTo: '#finishedRangeTo',
+  toggleFilterBtn: '#toggleFilterBtn',
+  filterSection: '#filterSection',
+  filterColumn: '#filterColumn',
+};
+
+/**
+ * Initializes left menu task UI event listeners and state.
+ * @param {object} initialState - Object containing initial categories, statuses, filter states.
+ * @param {function} onOpenTaskEditor - Callback function to open the task editor.
+ */
+export async function initLeftMenuTaskUI(initialState, onOpenTaskEditor) {
+  categories = initialState.categories;
+  statuses = initialState.statuses;
+  filterSectionVisible = initialState.filterSectionVisible;
+  selectedFilterCategories = initialState.selectedFilterCategories;
+  openTaskEditorCallback = onOpenTaskEditor;
+
+  // Apply initial filter section visibility state
+  const appContainer = document.querySelector('.app');
+  if (appContainer) {
+    appContainer.classList.toggle('filter-active', filterSectionVisible);
+  }
+
+  // Set up event listeners for inputs
+  document.querySelector(selectors.newTaskBtn)?.addEventListener('click', () => {
+    const id = 't_' + Date.now();
+    const emptyTask = {
+      id,
+      title: 'Untitled',
+      description: '',
+      notes: '',
+      attachments: [],
+      priority: 3,
+      deadline: null,
+      finishDate: null,
+      from: initialState.froms[0] || '',
+      categories: [initialState.categories[0] || 'General'],
+      status: initialState.statuses[0] || 'todo',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    if (openTaskEditorCallback) openTaskEditorCallback(emptyTask);
+  });
+
+  // Event listeners for filters and sorting
+  document.querySelector(selectors.createdRangeFrom)?.addEventListener('change', renderTaskList);
+  document.querySelector(selectors.createdRangeTo)?.addEventListener('change', renderTaskList);
+  document.querySelector(selectors.updatedRangeFrom)?.addEventListener('change', renderTaskList);
+  document.querySelector(selectors.updatedRangeTo)?.addEventListener('change', renderTaskList);
+  document.querySelector(selectors.deadlineRangeFrom)?.addEventListener('change', renderTaskList);
+  document.querySelector(selectors.deadlineRangeTo)?.addEventListener('change', renderTaskList);
+  document.querySelector(selectors.finishedRangeFrom)?.addEventListener('change', renderTaskList);
+  document.querySelector(selectors.finishedRangeTo)?.addEventListener('change', renderTaskList);
+  document.querySelector(selectors.searchInput)?.addEventListener('input', renderTaskList);
+  document.querySelector(selectors.sortBy)?.addEventListener('change', renderTaskList);
+  document.querySelector(selectors.groupBy)?.addEventListener('change', renderTaskList);
+  document.querySelector(selectors.filterStatus)?.addEventListener('change', renderTaskList);
+
+  // Multi-select Category Filter Event Listeners
+  const filterCategoryHeader = document.querySelector(selectors.filterCategoryHeader);
+  const filterCategoryDropdownContent = document.querySelector(selectors.filterCategoryDropdownContent);
+
+  if (filterCategoryHeader) {
+    filterCategoryHeader.addEventListener('click', (event) => {
+      filterCategoryDropdownContent?.classList.toggle('show');
+      event.stopPropagation(); // Prevent closing immediately
+    });
+  }
+
+  // Close multi-select dropdown if clicked outside
+  window.addEventListener('click', (event) => {
+    if (filterCategoryDropdownContent && !event.target.closest(selectors.filterCategoryMultiSelect) && filterCategoryDropdownContent.classList.contains('show')) {
+      filterCategoryDropdownContent.classList.remove('show');
+    }
+  });
+
+  // Filter section toggle
+  const toggleFilterBtn = document.querySelector(selectors.toggleFilterBtn);
+  const filterColumn = document.querySelector(selectors.filterColumn);
+
+  if (toggleFilterBtn && appContainer) {
+    toggleFilterBtn.addEventListener('click', async () => {
+      filterSectionVisible = !filterSectionVisible;
+      appContainer.classList.toggle('filter-active', filterSectionVisible);
+      await DB.putMeta('filterSectionVisible', filterSectionVisible); // Save state
+    });
+  }
+
+  // Initial rendering
+  renderFilterCategoriesMultiSelect();
+  renderStatusOptions();
+  await renderTaskList();
+}
+
+/**
+ * Updates the internal lists (categories, statuses) and filter states.
+ * This function is called from the main UI module when global state changes.
+ * @param {object} updatedState - Object with updated lists/states.
+ */
+export function updateLeftMenuTaskUIState(updatedState) {
+  if (updatedState.categories) categories = updatedState.categories;
+  if (updatedState.statuses) statuses = updatedState.statuses;
+  if (updatedState.filterSectionVisible !== undefined) filterSectionVisible = updatedState.filterSectionVisible;
+  if (updatedState.selectedFilterCategories) selectedFilterCategories = updatedState.selectedFilterCategories;
+  
+  // Re-apply visibility and re-render filters if state changes
+  const appContainer = document.querySelector('.app');
+  if (appContainer) {
+    appContainer.classList.toggle('filter-active', filterSectionVisible);
+  }
+  renderFilterCategoriesMultiSelect();
+  renderStatusOptions();
+}
+
+
+/**
+ * Renders the list of tasks based on current filters and sorting/grouping.
+ */
+export async function renderTaskList() {
+  const container = document.querySelector(selectors.taskList);
+  if (!container) return; // Ensure container exists
+  container.innerHTML = '';
+  const tasks = await DB.getAllTasks();
+  const q = document.querySelector(selectors.searchInput)?.value.toLowerCase() || '';
+  const filterStat = document.querySelector(selectors.filterStatus)?.value || '__all';
+  const sortVal = document.querySelector(selectors.sortBy)?.value || 'updatedAt';
+  const groupVal = document.querySelector(selectors.groupBy)?.value || '__none';
+
+  // Get values for all new date range filters
+  const createdRF = document.querySelector(selectors.createdRangeFrom)?.value;
+  const createdRT = document.querySelector(selectors.createdRangeTo)?.value;
+  const updatedRF = document.querySelector(selectors.updatedRangeFrom)?.value;
+  const updatedRT = document.querySelector(selectors.updatedRangeTo)?.value;
+  const deadlineRF = document.querySelector(selectors.deadlineRangeFrom)?.value;
+  const deadlineRT = document.querySelector(selectors.deadlineRangeTo)?.value;
+  const finishedRF = document.querySelector(selectors.finishedRangeFrom)?.value;
+  const finishedRT = document.querySelector(selectors.finishedRangeTo)?.value;
+
+  let filtered = tasks.filter(t => {
+    // Search filter
+    if (q && !(t.title?.toLowerCase().includes(q) || t.from?.toLowerCase().includes(q) || t.notes?.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q))) return false;
+    
+    // Category filter (multi-select)
+    // If selectedFilterCategories is empty, it means "select all" (no filter applied)
+    if (selectedFilterCategories.length > 0) {
+        const taskHasSelectedCategory = t.categories?.some(cat => selectedFilterCategories.includes(cat));
+        if (!taskHasSelectedCategory) return false;
+    }
+
+    // Status filter
+    if (filterStat !== '__all' && t.status !== filterStat) return false;
+    
+    // Date filters (adjusting endDate to include the whole day)
+    const checkDateRange = (taskDateStr, fromDateStr, toDateStr) => {
+      if (!taskDateStr) return false;
+      const taskDate = new Date(taskDateStr);
+      if (fromDateStr && taskDate < new Date(fromDateStr)) return false;
+      if (toDateStr) {
+        const toDate = new Date(toDateStr);
+        toDate.setDate(toDate.getDate() + 1); // Set to next day 00:00:00 to include the full 'to' day
+        if (taskDate >= toDate) return false;
+      }
+      return true;
+    };
+
+    if ((createdRF || createdRT) && !checkDateRange(t.createdAt, createdRF, createdRT)) return false;
+    if ((updatedRF || updatedRT) && !checkDateRange(t.updatedAt, updatedRF, updatedRT)) return false;
+    if ((deadlineRF || deadlineRT) && !checkDateRange(t.deadline, deadlineRF, deadlineRT)) return false;
+    // For finishDate, specifically handle null values for unfinished tasks
+    if ((finishedRF || finishedRT)) {
+      if (!t.finishDate || !checkDateRange(t.finishDate, finishedRF, finishedRT)) return false;
+    }
+
+
+    return true;
+  });
+
+  // Grouping logic
+  if (groupVal === '__none') {
+      // No grouping, just sort and render
+      filtered.sort((a, b) => {
+          if (sortVal === 'deadline') return (a.deadline || '').localeCompare(b.deadline || '');
+          if (sortVal === 'priority') return a.priority - b.priority;
+          if (sortVal === 'from') return (a.from || '').localeCompare(b.from || '');
+          return (b.updatedAt || '').localeCompare(a.updatedAt || ''); // Default sort by updated at descending
+      });
+      renderTaskItems(container, filtered);
+  } else {
+      const groupedTasks = {};
+      
+      filtered.forEach(task => {
+          if (groupVal === 'category' && task.categories && task.categories.length > 0) {
+              // If grouping by category and task has multiple categories, add to each group
+              task.categories.forEach(category => {
+                  const groupKey = category || 'No Category';
+                  if (!groupedTasks[groupKey]) {
+                      groupedTasks[groupKey] = [];
+                  }
+                  // Avoid duplicate tasks if they appear multiple times due to other filters
+                  if (!groupedTasks[groupKey].some(t => t.id === task.id)) {
+                      groupedTasks[groupKey].push(task);
+                  }
+              });
+          } else {
+              let groupKey;
+              switch (groupVal) {
+                  case 'from':
+                      groupKey = task.from || 'No From';
+                      break;
+                  case 'status':
+                      groupKey = task.status || 'No Status';
+                      break;
+                  case 'priority':
+                      groupKey = task.priority ? `Priority ${task.priority}` : "No Priority";
+                      break;
+                  case 'deadlineYear':
+                      groupKey = task.deadline ? new Date(task.deadline).getFullYear().toString() : 'No Deadline';
+                      break;
+                  case 'deadlineMonthYear':
+                      groupKey = task.deadline ? new Date(task.deadline).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : 'No Deadline';
+                      break;
+                  case 'finishDateYear':
+                      groupKey = task.finishDate ? new Date(task.finishDate).getFullYear().toString() : 'No Finish Date';
+                      break;
+                  case 'finishDateMonthYear':
+                      groupKey = task.finishDate ? new Date(task.finishDate).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : 'No Finish Date';
+                      break;
+                  case 'createdAtYear':
+                      groupKey = task.createdAt ? new Date(task.createdAt).getFullYear().toString() : 'No Creation Date';
+                      break;
+                  case 'createdAtMonthYear':
+                      groupKey = task.createdAt ? new Date(task.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : 'No Creation Date';
+                      break;
+                  default:
+                      groupKey = 'No Group';
+              }
+
+              if (!groupedTasks[groupKey]) {
+                  groupedTasks[groupKey] = [];
+              }
+              groupedTasks[groupKey].push(task);
+          }
+      });
+
+      // Sort group keys
+      const sortedGroupKeys = Object.keys(groupedTasks).sort((a, b) => {
+          // Special handling for date groups to sort numerically
+          if (groupVal.includes('MonthYear')) {
+              // For month-year, parse to date objects for proper sorting
+              const dateA = new Date(a);
+              const dateB = new Date(b);
+              if (!isNaN(dateA.getTime()) && !isNaN(dateB.getTime())) return dateA.getTime() - dateB.getTime();
+          } else if (groupVal.includes('Year')) {
+              const yearA = parseInt(a.replace(/\D/g, ''), 10);
+              const yearB = parseInt(b.replace(/\D/g, ''), 10);
+              if (!isNaN(yearA) && !isNaN(yearB)) return yearA - yearB;
+          } else if (groupVal === 'priority') {
+              // Extract priority number for sorting
+              const pA = parseInt(a.replace('Priority ', ''), 10);
+              const pB = parseInt(b.replace('Priority ', ''), 10);
+              if (!isNaN(pA) && !isNaN(pB)) return pA - pB;
+          }
+          // Default alphabetical sort for other keys, with 'No X' last
+          if (a.startsWith('No ')) return 1;
+          if (b.startsWith('No ')) return -1;
+          return a.localeCompare(b);
+      });
+
+      // Render grouped tasks with collapsible sections
+      sortedGroupKeys.forEach(groupKey => {
+          const groupHeaderDiv = document.createElement('div');
+          groupHeaderDiv.className = 'group-header';
+          groupHeaderDiv.innerHTML = `
+              <h4>${escapeHtml(groupKey)}</h4>
+              <button class="toggle-group-btn" data-group-key="${escapeHtml(groupKey)}">&#9660;</button>
+          `; // Down arrow initially
+
+          const groupContentDiv = document.createElement('div');
+          groupContentDiv.className = 'group-content show'; // Initially show content
+
+          container.appendChild(groupHeaderDiv);
+          container.appendChild(groupContentDiv);
+
+          // Add event listener to toggle content visibility
+          groupHeaderDiv.querySelector('.toggle-group-btn')?.addEventListener('click', (e) => {
+              const btn = e.target;
+              const content = btn.parentElement.nextElementSibling; // The div immediately after the header
+              content?.classList.toggle('show');
+              if (content) {
+                btn.innerHTML = content.classList.contains('show') ? '&#9660;' : '&#9658;'; // Toggle arrow direction
+              }
+          });
+
+          // Sort tasks within each group
+          groupedTasks[groupKey].sort((a, b) => {
+              if (sortVal === 'deadline') return (a.deadline || '').localeCompare(b.deadline || '');
+              if (sortVal === 'priority') return a.priority - b.priority;
+              if (sortVal === 'from') return (a.from || '').localeCompare(b.from || '');
+              return (b.updatedAt || '').localeCompare(a.updatedAt || '');
+          });
+
+          renderTaskItems(groupContentDiv, groupedTasks[groupKey]);
+      });
+  }
+}
+
+/**
+ * Renders individual task items into a container.
+ * @param {HTMLElement} container - The DOM element to render tasks into.
+ * @param {Array<object>} tasksToRender - Array of task objects to render.
+ */
+function renderTaskItems(container, tasksToRender) {
+  const tmpl = document.getElementById('task-item-template')?.content;
+  if (!tmpl) return; // Ensure template exists
+
+  tasksToRender.forEach(t => {
+    const node = tmpl.cloneNode(true);
+    const el = node.querySelector('.task-item');
+    if (!el) return;
+
+    el.querySelector('.title').textContent = t.title || '(no title)';
+    el.querySelector('.meta').textContent = `${escapeHtml(t.from || '—')} • ${escapeHtml(t.categories?.join(', ') || 'No Category')} • ${escapeHtml(t.status)}`;
+    
+    const deadlineText = t.deadline ? `Due: ${new Date(t.deadline).toLocaleDateString()}` : '';
+    const finishDateText = t.finishDate ? `Finished: ${new Date(t.finishDate).toLocaleDateString()}` : '';
+
+    el.querySelector('.priority').textContent = ['!', '!!', '!!!'][Math.max(0, 3 - t.priority)] || t.priority;
+    
+    const deadlineDisplay = el.querySelector('.deadline-display');
+    const finishDateDisplay = el.querySelector('.finish-date-display');
+
+    if (deadlineDisplay) {
+      deadlineDisplay.textContent = deadlineText;
+    }
+    if (finishDateDisplay) {
+      finishDateDisplay.textContent = finishDateText;
+    }
+
+    el.addEventListener('click', () => {
+      if (openTaskEditorCallback) openTaskEditorCallback(t);
+    });
+    container.appendChild(node);
+  });
+}
+
+/**
+ * Renders the multi-select category filter UI.
+ */
+export async function renderFilterCategoriesMultiSelect() {
+  const selectedDisplay = document.querySelector(selectors.selectedFilterCategoriesDisplay);
+  const dropdownContent = document.querySelector(selectors.filterCategoryDropdownContent);
+
+  if (!selectedDisplay || !dropdownContent) return;
+
+  selectedDisplay.innerHTML = ''; // Clear current selected tags
+  dropdownContent.innerHTML = ''; // Clear current dropdown items
+
+  // Render selected categories as tags in the header
+  if (selectedFilterCategories.length === 0) {
+    selectedDisplay.innerHTML = '<span class="placeholder-text">All Categories</span>';
+  } else {
+    selectedFilterCategories.forEach((cat) => {
+      const tag = document.createElement('div');
+      tag.className = 'selected-tag';
+      tag.innerHTML = `${escapeHtml(cat)}<button data-cat="${escapeHtml(cat)}">x</button>`;
+      tag.querySelector('button')?.addEventListener('click', async (e) => {
+        e.stopPropagation(); // Prevent dropdown from closing
+        const categoryToRemove = e.target.dataset.cat;
+        selectedFilterCategories = selectedFilterCategories.filter(c => c !== categoryToRemove);
+        await DB.putMeta('selectedFilterCategories', selectedFilterCategories); // Persist
+        renderFilterCategoriesMultiSelect();
+        renderTaskList();
+      });
+      selectedDisplay.appendChild(tag);
+    });
+  }
+
+  // Render all categories in the dropdown content
+  categories.forEach(cat => {
+    const item = document.createElement('div');
+    item.className = 'dropdown-item';
+    item.textContent = escapeHtml(cat);
+    if (selectedFilterCategories.includes(cat)) {
+      item.classList.add('selected');
+    }
+
+    item.addEventListener('click', async (e) => {
+      e.stopPropagation(); // Prevent dropdown from closing immediately on item click
+
+      if (selectedFilterCategories.includes(cat)) {
+        // Remove if already selected
+        selectedFilterCategories = selectedFilterCategories.filter(c => c !== cat);
+      } else {
+        // Add if not selected
+        selectedFilterCategories.push(cat);
+      }
+      await DB.putMeta('selectedFilterCategories', selectedFilterCategories); // Persist
+      renderFilterCategoriesMultiSelect(); // Re-render this filter UI
+      renderTaskList(); // Re-render task list based on new filter
+    });
+    dropdownContent.appendChild(item);
+  });
+}
+
+/**
+ * Renders the status options in the filter dropdown.
+ */
+export function renderStatusOptions() {
+  const sel = document.querySelector(selectors.filterStatus);
+  if (sel) {
+    sel.innerHTML = '<option value="__all">All</option>' + statuses.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('\n');
+  }
+}
+
