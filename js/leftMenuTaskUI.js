@@ -212,10 +212,35 @@ export async function renderTaskList() {
   if (groupVal === '__none') {
       // No grouping, just sort and render
       filtered.sort((a, b) => {
-          if (sortVal === 'deadline') return (a.deadline || '').localeCompare(b.deadline || '');
+          if (sortVal === 'deadline') {
+            // Sort deadline: null/empty to the end
+            const deadlineA = a.deadline || null;
+            const deadlineB = b.deadline || null;
+
+            if (deadlineA === null && deadlineB === null) return 0;
+            if (deadlineA === null) return 1; // a is null, b is not, so a comes after b
+            if (deadlineB === null) return -1; // b is null, a is not, so a comes before b
+            return deadlineA.localeCompare(deadlineB);
+          }
           if (sortVal === 'priority') return a.priority - b.priority;
-          if (sortVal === 'from') return (a.from || '').localeCompare(b.from || '');
-          return (b.updatedAt || '').localeCompare(a.updatedAt || ''); // Default sort by updated at descending
+          if (sortVal === 'from') {
+            // Sort from: null/empty to the end
+            const fromA = a.from || null;
+            const fromB = b.from || null;
+
+            if (fromA === null && fromB === null) return 0;
+            if (fromA === null) return 1;
+            if (fromB === null) return -1;
+            return fromA.localeCompare(fromB);
+          }
+          // Default sort by updated at descending, null/empty to the end
+          const updatedAtA = a.updatedAt || null;
+          const updatedAtB = b.updatedAt || null;
+
+          if (updatedAtA === null && updatedAtB === null) return 0;
+          if (updatedAtA === null) return 1;
+          if (updatedAtB === null) return -1;
+          return updatedAtB.localeCompare(updatedAtA);
       });
       renderTaskItems(container, filtered);
   } else {
@@ -326,10 +351,33 @@ export async function renderTaskList() {
 
           // Sort tasks within each group
           groupedTasks[groupKey].sort((a, b) => {
-              if (sortVal === 'deadline') return (a.deadline || '').localeCompare(b.deadline || '');
+              if (sortVal === 'deadline') {
+                const deadlineA = a.deadline || null;
+                const deadlineB = b.deadline || null;
+
+                if (deadlineA === null && deadlineB === null) return 0;
+                if (deadlineA === null) return 1;
+                if (deadlineB === null) return -1;
+                return deadlineA.localeCompare(deadlineB);
+              }
               if (sortVal === 'priority') return a.priority - b.priority;
-              if (sortVal === 'from') return (a.from || '').localeCompare(b.from || '');
-              return (b.updatedAt || '').localeCompare(a.updatedAt || '');
+              if (sortVal === 'from') {
+                const fromA = a.from || null;
+                const fromB = b.from || null;
+
+                if (fromA === null && fromB === null) return 0;
+                if (fromA === null) return 1;
+                if (fromB === null) return -1;
+                return fromA.localeCompare(fromB);
+              }
+              // Default sort by updatedAt descending, null/empty to the end
+              const updatedAtA = a.updatedAt || null;
+              const updatedAtB = b.updatedAt || null;
+
+              if (updatedAtA === null && updatedAtB === null) return 0;
+              if (updatedAtA === null) return 1;
+              if (updatedAtB === null) return -1;
+              return updatedAtB.localeCompare(updatedAtA);
           });
 
           renderTaskItems(groupContentDiv, groupedTasks[groupKey]);
@@ -444,4 +492,3 @@ export function renderStatusOptions() {
     sel.innerHTML = '<option value="__all">All</option>' + statuses.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('\n');
   }
 }
-

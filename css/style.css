@@ -1,7 +1,7 @@
 /* Basic reset and layout */
 :root{--bg:#f6f7fb;--card:#ffffff;--muted:#6c7480;--accent:#2b7cff;--danger:#e74c3c}
 *{box-sizing:border-box}
-html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial}
+html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font-size: small;}
 /* Changed .app to use grid for three columns */
 .app{
   display:grid;
