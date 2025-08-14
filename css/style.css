@@ -701,3 +701,130 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Subtle shadow for emphasis */
 }
 
+/* --- Task Viewer Styles (NEW) --- */
+.viewer {
+  display: grid;
+  grid-template-columns: 1fr 320px; /* Left for main content, right for aside */
+  gap: 20px;
+  height: 100%; /* Ensure viewer takes full height of its container */
+  overflow: auto; /* Allow scrolling if content overflows */
+}
+
+.viewer-header {
+  grid-column: 1 / -1; /* Spans across both columns */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.viewer-header h2 {
+  margin: 0;
+  color: #333;
+  font-size: 1.8em;
+}
+
+.viewer-details {
+  grid-column: 1 / 2; /* Occupies the first column */
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); /* Responsive grid for details */
+  gap: 15px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #eef2f7;
+  padding-bottom: 20px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-item .label {
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.detail-item span {
+  font-weight: 500;
+  color: #555;
+  font-size: 1.1em;
+}
+
+.viewer-section {
+  grid-column: 1 / 2; /* Occupies the first column */
+  margin-bottom: 20px;
+}
+
+.viewer-content {
+  background: #fdfdfd;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  padding: 12px;
+  min-height: 100px;
+  color: #444;
+  line-height: 1.6;
+  overflow: auto; /* Enable scrolling for rich text content */
+}
+.viewer-content img { /* Style images within rich text */
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: 10px 0;
+}
+.viewer-content a { /* Style links within rich text */
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.viewer-aside {
+  grid-column: 2 / -1; /* Occupies the second column */
+  background: var(--card);
+  border-radius: 8px;
+  padding: 12px;
+  border: 1px solid #f0f2f7;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  align-self: flex-start; /* Stick to the top of its grid cell */
+}
+
+.viewer-actions {
+  grid-column: 1 / -1; /* Spans both columns at the bottom */
+  display: flex;
+  justify-content: flex-start;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+/* Action button general styles */
+.action-btn {
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.action-btn:hover {
+  background: #206bbd;
+  border-color: #206bbd;
+}
+
+/* Ensure editor (edit mode) is hidden by default */
+.editor-area .editor {
+  display: none; /* Hidden by default */
+}
+/* Ensure viewer (view mode) is hidden by default */
+.editor-area #viewerArea {
+  display: none; /* Hidden by default */
+}
+
+/* When a task is selected, either viewer or editor will be shown */
+/* This is controlled by JS, setting display to 'grid' or 'flex' as needed */
+

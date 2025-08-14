@@ -71,5 +71,22 @@ export const Editor = (function(){
       focus: ()=>ed.focus()
     };
   }
-  return { init };
+
+  /**
+   * Renders static HTML content into a given element.
+   * This is used for the read-only view in TaskViewerUI.
+   * @param {HTMLElement} element - The DOM element to render content into.
+   * @param {string} content - The HTML string content to display.
+   */
+  function renderStaticContent(element, content) {
+    if (element) {
+        element.innerHTML = content || ''; // Simply set the innerHTML
+        // In a production environment, you might want to sanitize the content
+        // to prevent XSS attacks if it comes from untrusted sources.
+    }
+  }
+
+  // Return both init and renderStaticContent as part of the public API of Editor
+  return { init, renderStaticContent };
 })();
+

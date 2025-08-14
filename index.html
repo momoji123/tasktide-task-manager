@@ -229,6 +229,9 @@
       </header>
 
       <section class="editor-area" id="editorArea">
+        <!-- Task Viewer will be rendered here -->
+        <div id="viewerArea"></div>
+        <!-- Task Editor will be rendered here, initially hidden -->
         <div class="placeholder">Select or create a task to view/edit details</div>
       </section>
     </main>
@@ -331,6 +334,55 @@
       <div style="margin-top:8px;display:flex;gap:8px">
         <button id="saveMilestoneBtn">Save Milestone</button>
         <button id="deleteMilestoneBtn" class="danger">Delete Milestone</button>
+      </div>
+    </div>
+  </template>
+
+  <!-- New template for the Task Viewer -->
+  <template id="task-viewer-template">
+    <div class="viewer">
+      <div class="viewer-header">
+        <h2 id="viewTaskTitle"></h2>
+        <button id="editTaskBtn" class="action-btn">Edit Task</button>
+      </div>
+      <div class="viewer-details">
+        <div class="detail-item">
+          <div class="label">From</div>
+          <span id="viewTaskFrom"></span>
+        </div>
+        <div class="detail-item">
+          <div class="label">Priority</div>
+          <span id="viewTaskPriority"></span>
+        </div>
+        <div class="detail-item">
+          <div class="label">Deadline</div>
+          <span id="viewTaskDeadline"></span>
+        </div>
+        <div class="detail-item">
+          <div class="label">Finish Date</div>
+          <span id="viewTaskFinishDate"></span>
+        </div>
+        <div class="detail-item">
+          <div class="label">Status</div>
+          <span id="viewTaskStatus"></span>
+        </div>
+      </div>
+      <div class="viewer-section">
+        <div class="label">Description</div>
+        <div id="viewDescContent" class="viewer-content card"></div>
+      </div>
+      <div class="viewer-section">
+        <div class="label">Notes</div>
+        <div id="viewNotesContent" class="viewer-content card"></div>
+      </div>
+      <div class="viewer-aside">
+        <div class="label">Categories</div>
+        <div id="viewCategoryList" class="tag-list"></div>
+        <div class="label">Attachments</div>
+        <div id="viewAttachments" class="attach-list"></div>
+      </div>
+      <div class="viewer-actions">
+        <button id="viewMilestonesBtn" class="action-btn">View Milestones</button>
       </div>
     </div>
   </template>

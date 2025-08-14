@@ -7,6 +7,7 @@ import { DB } from './storage.js';
 import * as HeaderUI from './headerUI.js';
 import * as LeftMenuTaskUI from './leftMenuTaskUI.js';
 import * as TaskEditorUI from './taskEditorUI.js';
+import * as TaskViewerUI from './taskViewerUI.js'; // New: Import TaskViewerUI
 import * as MilestoneGraphUI from './milestoneGraphUI.js';
 import * as MilestoneEditorUI from './milestoneEditorUI.js';
 import { showModalAlert } from './utilUI.js'; // Just for error/info modals
@@ -60,11 +61,17 @@ export const UI = (function() {
       MilestoneEditorUI.updateMilestoneEditorUIState
     );
 
-    // LeftMenuTaskUI needs: initial state, and callback to open the task editor
-    LeftMenuTaskUI.initLeftMenuTaskUI(commonState, TaskEditorUI.openTaskEditor);
+    // LeftMenuTaskUI needs: initial state, and callback to open the task viewer (default)
+    // When a task is clicked, it opens in view mode
+    LeftMenuTaskUI.initLeftMenuTaskUI(commonState, TaskViewerUI.openTaskViewer);
 
-    // TaskEditorUI needs: initial state, and callbacks to re-render task list, and open milestone view
-    TaskEditorUI.initTaskEditorUI(commonState, LeftMenuTaskUI.renderTaskList, MilestoneGraphUI.openMilestonesView);
+    // TaskEditorUI needs: initial state, and callbacks to re-render task list, open milestone view, and open task viewer
+    // TaskEditorUI now gets a callback to open the viewer after saving a task
+    TaskEditorUI.initTaskEditorUI(commonState, LeftMenuTaskUI.renderTaskList, MilestoneGraphUI.openMilestonesView, TaskViewerUI.openTaskViewer);
+
+    // TaskViewerUI needs: callback to open the task editor
+    // TaskViewerUI also needs a callback to open milestone view
+    TaskViewerUI.initTaskViewerUI(TaskEditorUI.openTaskEditor, MilestoneGraphUI.openMilestonesView);
 
     // MilestoneGraphUI needs: callback to open the milestone editor
     MilestoneGraphUI.initMilestoneGraphUI(MilestoneEditorUI.openMilestoneEditor);
@@ -79,8 +86,29 @@ export const UI = (function() {
     // central state management pattern (like Redux or simple event bus) would be ideal.
 
     // For now, the existing direct updates and callbacks suffice for the current flow.
+
+    // Handle new task button: it should open the editor directly for new tasks
+    document.getElementById('newTaskBtn')?.addEventListener('click', () => {
+        TaskEditorUI.openTaskEditor({
+            id: 'new', // Use a temporary ID for new tasks
+            title: '',
+            description: '',
+            notes: '',
+            status: statuses[0] || 'todo',
+            priority: 3,
+            from: froms[0] || 'Personal',
+            deadline: null,
+            finishDate: null,
+            categories: [],
+            attachments: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        });
+    });
+
   }
 
   // Expose init function
   return { init };
 })();
+

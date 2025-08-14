@@ -5,7 +5,8 @@
 import { DB } from './storage.js';
 import { UI } from './ui.js';
 
-(async function main(){
+// Ensure the DOM is fully loaded before initializing the UI
+window.addEventListener('DOMContentLoaded', async function main(){
   // Small compatibility guard for IndexedDB
   if(!('indexedDB' in window)){
     document.getElementById('app').innerHTML = '<div style="padding:20px;color:#900">IndexedDB not available in this browser.</div>';
@@ -17,4 +18,5 @@ import { UI } from './ui.js';
 
   // Initialize the main UI module
   await UI.init();
-})();
+});
+
