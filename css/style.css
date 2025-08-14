@@ -704,14 +704,18 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 /* --- Task Viewer Styles (NEW) --- */
 .viewer {
   display: grid;
-  grid-template-columns: 1fr 320px; /* Left for main content, right for aside */
+  /* One column for the left content (which itself will be flex/grid), one for aside */
+  grid-template-columns: 1fr 320px; 
+  /* Header, flexible content area (left column + right aside), actions */
+  grid-template-rows: auto 1fr auto; 
   gap: 20px;
   height: 100%; /* Ensure viewer takes full height of its container */
-  overflow: auto; /* Allow scrolling if content overflows */
+  overflow: hidden; /* Prevent overall scrollbars on the viewer itself, child elements will scroll */
 }
 
 .viewer-header {
-  grid-column: 1 / -1; /* Spans across both columns */
+  grid-column: 1 / -1; /* Spans across both main content columns */
+  grid-row: 1; /* Explicitly place in the first row */
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -726,12 +730,23 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
   font-size: 1.8em;
 }
 
+/* New wrapper for the main content on the left */
+.viewer-main-content-column {
+  grid-column: 1 / 2; /* Occupies the first column of the main content row */
+  grid-row: 2; /* Occupies the second row (content area) */
+  display: flex; /* Use flexbox to stack its children */
+  flex-direction: column;
+  gap: 20px; /* Gap between details, description, notes */
+  overflow-y: auto; /* Allow this column to scroll independently if its content overflows */
+  padding-right: 10px; /* Add some padding for the scrollbar if it appears */
+}
+
 .viewer-details {
-  grid-column: 1 / 2; /* Occupies the first column */
+  /* No grid-column/grid-row needed here, handled by parent viewer-main-content-column */
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); /* Responsive grid for details */
   gap: 15px;
-  margin-bottom: 20px;
+  margin-bottom: 0; /* No margin-bottom, gap handled by parent flex */
   border-bottom: 1px solid #eef2f7;
   padding-bottom: 20px;
 }
@@ -754,8 +769,8 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 }
 
 .viewer-section {
-  grid-column: 1 / 2; /* Occupies the first column */
-  margin-bottom: 20px;
+  /* No grid-column/grid-row needed here, handled by parent viewer-main-content-column */
+  margin-bottom: 0; /* No margin-bottom, gap handled by parent flex */
 }
 
 .viewer-content {
@@ -780,7 +795,8 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 }
 
 .viewer-aside {
-  grid-column: 2 / -1; /* Occupies the second column */
+  grid-column: 2 / -1; /* Occupies the second column (the rightmost) */
+  grid-row: 2; /* Occupies the second row (content area) */
   background: var(--card);
   border-radius: 8px;
   padding: 12px;
@@ -789,10 +805,12 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
   flex-direction: column;
   gap: 15px;
   align-self: flex-start; /* Stick to the top of its grid cell */
+  overflow-y: auto; /* Allow this column to scroll independently */
 }
 
 .viewer-actions {
-  grid-column: 1 / -1; /* Spans both columns at the bottom */
+  grid-column: 1 / -1; /* Spans both main content columns at the bottom */
+  grid-row: 3; /* Explicitly place in the third row */
   display: flex;
   justify-content: flex-start;
   gap: 10px;
@@ -827,4 +845,3 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 
 /* When a task is selected, either viewer or editor will be shown */
 /* This is controlled by JS, setting display to 'grid' or 'flex' as needed */
-

@@ -345,36 +345,40 @@
         <h2 id="viewTaskTitle"></h2>
         <button id="editTaskBtn" class="action-btn">Edit Task</button>
       </div>
-      <div class="viewer-details">
-        <div class="detail-item">
-          <div class="label">From</div>
-          <span id="viewTaskFrom"></span>
+      <!-- New wrapper for the left column content (details, description, notes) -->
+      <div class="viewer-main-content-column">
+        <div class="viewer-details">
+          <div class="detail-item">
+            <div class="label">From</div>
+            <span id="viewTaskFrom"></span>
+          </div>
+          <div class="detail-item">
+            <div class="label">Priority</div>
+            <span id="viewTaskPriority"></span>
+          </div>
+          <div class="detail-item">
+            <div class="label">Deadline</div>
+            <span id="viewTaskDeadline"></span>
+          </div>
+          <div class="detail-item">
+            <div class="label">Finish Date</div>
+            <span id="viewTaskFinishDate"></span>
+          </div>
+          <div class="detail-item">
+            <div class="label">Status</div>
+            <span id="viewTaskStatus"></span>
+          </div>
         </div>
-        <div class="detail-item">
-          <div class="label">Priority</div>
-          <span id="viewTaskPriority"></span>
+        <div class="viewer-section">
+          <div class="label">Description</div>
+          <div id="viewDescContent" class="viewer-content card"></div>
         </div>
-        <div class="detail-item">
-          <div class="label">Deadline</div>
-          <span id="viewTaskDeadline"></span>
-        </div>
-        <div class="detail-item">
-          <div class="label">Finish Date</div>
-          <span id="viewTaskFinishDate"></span>
-        </div>
-        <div class="detail-item">
-          <div class="label">Status</div>
-          <span id="viewTaskStatus"></span>
+        <div class="viewer-section">
+          <div class="label">Notes</div>
+          <div id="viewNotesContent" class="viewer-content card"></div>
         </div>
       </div>
-      <div class="viewer-section">
-        <div class="label">Description</div>
-        <div id="viewDescContent" class="viewer-content card"></div>
-      </div>
-      <div class="viewer-section">
-        <div class="label">Notes</div>
-        <div id="viewNotesContent" class="viewer-content card"></div>
-      </div>
+      
       <div class="viewer-aside">
         <div class="label">Categories</div>
         <div id="viewCategoryList" class="tag-list"></div>
