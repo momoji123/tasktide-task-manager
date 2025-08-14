@@ -107,26 +107,75 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
   flex-wrap: wrap; /* Allow buttons to wrap */
 }
 .header-actions button{margin-left:0; /* Remove specific margin to use flex gap */padding:6px 10px;border-radius:8px;border:1px solid #e7eaf2;background:#fff}
-.editor-area{margin-top:14px;flex:1;background:var(--card);border-radius:12px;padding:16px;overflow:auto}
-.placeholder{color:var(--muted)}
+.editor-area{margin-top:14px;flex:1;background:var(--card);border-radius:12px;padding:16px;overflow:auto; box-shadow: 0 4px 12px rgba(0,0,0,0.08);} /* Added box-shadow */
+.placeholder{color:var(--muted); text-align: center; padding: 50px 0; font-size: 1.2em;} /* Centered placeholder text */
 
 /* Editor layout */
-.editor{display:grid;grid-template-columns:1fr 320px;gap:12px}
+.editor{display:grid;grid-template-columns:1fr 320px;gap:20px;} /* Increased gap */
 .card{background:#fff;border-radius:8px;padding:12px;border:1px solid #f0f2f7}
 .form-row{display:flex;gap:8px;margin-bottom:8px}
-.form-row input, .form-row select, .form-row textarea{flex:1;padding:8px;border-radius:6px;border:1px solid #e7eaf2}
-.label{font-size:12px;color:var(--muted);margin:8px 0 4px}
+.form-row input, .form-row select, .form-row textarea, .editor input, .editor select { /* Apply styles to all inputs/selects in editor */
+  flex:1;
+  padding:10px; /* Increased padding */
+  border-radius:8px; /* More rounded corners */
+  border:1px solid #e2e6ef;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease; /* Smooth transition on focus */
+}
+.editor input:focus, .editor select:focus, .editor textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(43, 124, 255, 0.2); /* Subtle focus ring */
+}
+
+.label{font-size:13px;color:var(--muted);margin:8px 0 4px; font-weight: 500;} /* Slightly larger font and bold */
 .tag-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 .tag{background:#e7eaf2;padding:4px 8px;border-radius:12px;font-size:12px}
 .tag.selected{background:var(--accent);color:#fff;margin-bottom: 1em;width: fit-content;}
 .tag button{background:none;border:none;color:inherit;cursor:pointer;margin-left:4px;font-size:10px}
 .attach-list{margin-top:8px;display:flex;flex-direction:column;gap:6px}
-.attachment{display:flex;justify-content:space-between;align-items:center;background:#f9fbff;padding:4px 8px;border-radius:6px;font-size:12px}
-.attachment a{color:var(--accent)}
-.attachment button{font-size:10px;padding:2px 6px;border-radius:4px;background:var(--danger);color:#fff;border:none;cursor:pointer}
-.toolbar{display:flex;gap:4px;margin-bottom:8px}
-.toolbar button{background:#f0f2f7;border:1px solid #e7eaf2;padding:4px 8px;border-radius:4px;font-size:12px;cursor:pointer}
-.toolbar button:hover{background:#e7eaf2}
+.attachment{display:flex;justify-content:space-between;align-items:center;background:#f9fbff;padding:8px 12px;border-radius:6px;font-size:13px; border: 1px solid #eef2f7;} /* Increased padding and added border */
+.attachment a{color:var(--accent); text-decoration: none;} /* Removed underline */
+.attachment a:hover { text-decoration: underline; } /* Added underline on hover */
+.attachment button{font-size:11px;padding:4px 8px;border-radius:6px;background:var(--danger);color:#fff;border:none;cursor:pointer; transition: background-color 0.2s ease;} /* Increased padding and border-radius */
+.attachment button:hover { background-color: #c0392b; } /* Darker red on hover */
+
+.toolbar{display:flex;gap:8px;margin-bottom:8px; border-bottom: 1px solid #eef2f7; padding-bottom: 8px;} /* Increased gap and added bottom border */
+.toolbar button{background:#f0f2f7;border:1px solid #e7eaf2;padding:6px 10px;border-radius:6px;font-size:13px;cursor:pointer; transition: background-color 0.2s ease, border-color 0.2s ease;} /* Increased padding and font-size */
+.toolbar button:hover{background:#e7eaf2; border-color: #d1d5db;}
+
+/* Main editor action buttons */
+.editor button {
+  padding: 5px 7px;
+  border-radius: 8px;
+  border: 1px solid #e7eaf2;
+  background: #fff;
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.editor button:hover {
+  background: #f0f2f7;
+  border-color: #d1d5db;
+}
+.editor button#saveBtn {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.editor button#saveBtn:hover {
+  background: #206bbd; /* Darker accent on hover */
+  border-color: #206bbd;
+}
+.editor button#deleteBtn {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+.editor button#deleteBtn:hover {
+  background: #c0392b; /* Darker danger on hover */
+  border-color: #c0392b;
+}
 
 /* Modal styles */
 .modal-backdrop {
@@ -135,7 +184,7 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0, 0, 0, 0.6); /* Darker backdrop */
   display: flex;
   justify-content: center;
   align-items: center;
@@ -144,11 +193,18 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 
 .modal-content {
   background-color: white;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 25px; /* Increased padding */
+  border-radius: 12px; /* More rounded corners */
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25); /* Stronger shadow */
   width: 90%;
-  max-width: 500px;
+  max-width: 550px; /* Slightly wider max-width */
+  transform: translateY(-20px); /* Slight lift animation */
+  animation: modal-enter 0.3s forwards ease-out;
+}
+
+@keyframes modal-enter {
+  from { opacity: 0; transform: translateY(-40px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .modal-header {
@@ -156,55 +212,74 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid #e7eaf2;
-  padding-bottom: 10px;
-  margin-bottom: 10px;
+  padding-bottom: 15px; /* Increased padding */
+  margin-bottom: 15px; /* Increased margin */
 }
 
 .modal-header h3 {
   margin: 0;
+  font-size: 1.5em; /* Larger header font */
+  color: #333;
 }
 
 .modal-close {
   background: none;
   border: none;
-  font-size: 24px;
+  font-size: 28px; /* Larger close button */
   cursor: pointer;
   line-height: 1;
+  color: #6c7480; /* Muted color */
+  transition: color 0.2s ease;
+}
+.modal-close:hover {
+  color: #333;
 }
 
 .modal-body textarea {
   width: 100%;
-  min-height: 150px;
-  border-radius: 6px;
-  border: 1px solid #e7eaf2;
-  padding: 8px;
+  min-height: 120px; /* Slightly smaller min-height for modals */
+  border-radius: 8px; /* More rounded corners */
+  border: 1px solid #e2e6ef;
+  padding: 10px; /* Increased padding */
+  resize: vertical; /* Allow vertical resizing */
 }
 
 .modal-body {
   max-height: 400px; /* Added: Maximum height for modal body */
   overflow-y: auto; /* Added: Enable vertical scrolling if content overflows */
+  padding-right: 5px; /* Add slight padding for scrollbar */
 }
 
 .modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 10px;
+  gap: 10px; /* Increased gap */
+  margin-top: 20px; /* Increased margin */
 }
 
 .modal-footer button {
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: 10px 18px; /* Increased padding */
+  border-radius: 8px; /* More rounded corners */
   border: 1px solid #e7eaf2;
   background: #fff;
   cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .modal-footer .modal-save {
   background: var(--accent);
   color: #fff;
-  border: none;
+  border-color: var(--accent);
 }
+.modal-footer .modal-save:hover {
+  background: #206bbd;
+  border-color: #206bbd;
+}
+.modal-footer .modal-cancel:hover {
+  background: #f0f2f7;
+}
+
 
 /* Dropdown styles from index.html moved here for consistency */
 .dropdown {
@@ -215,18 +290,24 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 .dropdown-content {
   display: none;
   position: absolute;
-  background-color: #f9f9f9;
-  min-width: 160px;
-  box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+  background-color: #fff; /* White background */
+  min-width: 180px; /* Slightly wider */
+  box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.15); /* Slightly softer shadow */
   z-index: 1001; /* Higher than settings dropdown */
   right: 0;
-  border-radius: 6px;
+  border-radius: 8px; /* More rounded */
   overflow: hidden;
+  animation: dropdown-fade-in 0.2s ease-out forwards;
+}
+
+@keyframes dropdown-fade-in {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .dropdown-content button {
-  color: black;
-  padding: 12px 16px;
+  color: #333; /* Darker text color */
+  padding: 12px 18px; /* Increased padding */
   text-decoration: none;
   display: block;
   width: 100%;
@@ -235,10 +316,12 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
   background: none;
   cursor: pointer;
   border-radius: 0;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .dropdown-content button:hover {
-  background-color: #f1f1f1;
+  background-color: #f6f7fb; /* Light background on hover */
+  color: var(--accent);
 }
 
 .dropdown-content.show {
@@ -248,10 +331,15 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 /* Style for the date inputs to make them align nicely */
 .date-inputs {
   display: flex;
-  gap: 8px;
+  gap: 12px; /* Increased gap */
+}
+.date-inputs > div { /* Apply flex to children of date-inputs for vertical label/input */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 .date-inputs input {
-  flex: 1;
+  width: 100%; /* Ensure input fills its container */
 }
 
 /* Style for task item dates to stack or flow */
@@ -289,26 +377,34 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 6px 8px;
-    border-radius: 6px;
+    padding: 8px 10px; /* Increased padding */
+    border-radius: 8px; /* More rounded */
     border: 1px solid #e2e6ef;
     background-color: white;
     cursor: pointer;
-    min-height: 34px; /* Ensure consistent height */
+    min-height: 38px; /* Ensure consistent height */
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.multi-select-header:hover {
+  border-color: #d1d5db;
+}
+.multi-select-header.active { /* Style when dropdown is open */
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(43, 124, 255, 0.2);
 }
 
 .multi-select-header .selected-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: 6px; /* Increased gap */
     flex-grow: 1;
 }
 
 .multi-select-header .selected-tag {
     background-color: var(--accent);
     color: white;
-    padding: 2px 6px;
-    border-radius: 4px;
+    padding: 3px 8px; /* Increased padding */
+    border-radius: 6px; /* More rounded */
     font-size: 12px;
     display: flex;
     align-items: center;
@@ -320,7 +416,7 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
     border: none;
     color: white;
     cursor: pointer;
-    font-size: 10px;
+    font-size: 11px; /* Slightly larger close button */
     padding: 0;
     line-height: 1;
 }
@@ -604,3 +700,4 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
     background-color: #eef2ff; /* Light background for selected item */
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Subtle shadow for emphasis */
 }
+
