@@ -10,6 +10,7 @@ let categories = [];
 let statuses = [];
 let filterSectionVisible = true;
 let selectedFilterCategories = [];
+let selectedFilterStatuses = []; // New state for multi-select status filter
 let openTaskEditorCallback = null; // Callback to open the task editor
 
 const selectors = {
@@ -20,7 +21,13 @@ const selectors = {
   filterCategoryHeader: '#filterCategoryMultiSelect .multi-select-header',
   selectedFilterCategoriesDisplay: '#selectedFilterCategoriesDisplay',
   filterCategoryDropdownContent: '#filterCategoryDropdownContent',
-  filterStatus: '#filterStatus',
+  
+  // New selectors for multi-select status filter
+  filterStatusMultiSelect: '#filterStatusMultiSelect',
+  filterStatusHeader: '#filterStatusMultiSelect .multi-select-header',
+  selectedFilterStatusesDisplay: '#selectedFilterStatusesDisplay',
+  filterStatusDropdownContent: '#filterStatusDropdownContent',
+
   sortBy: '#sortBy',
   groupBy: '#groupBy',
   createdRangeFrom: '#createdRangeFrom',
@@ -46,6 +53,8 @@ export async function initLeftMenuTaskUI(initialState, onOpenTaskEditor) {
   statuses = initialState.statuses;
   filterSectionVisible = initialState.filterSectionVisible;
   selectedFilterCategories = initialState.selectedFilterCategories;
+  // Initialize selectedFilterStatuses from storage or default to empty array
+  selectedFilterStatuses = initialState.selectedFilterStatuses || []; 
   openTaskEditorCallback = onOpenTaskEditor;
 
   // Apply initial filter section visibility state
@@ -87,7 +96,6 @@ export async function initLeftMenuTaskUI(initialState, onOpenTaskEditor) {
   document.querySelector(selectors.searchInput)?.addEventListener('input', renderTaskList);
   document.querySelector(selectors.sortBy)?.addEventListener('change', renderTaskList);
   document.querySelector(selectors.groupBy)?.addEventListener('change', renderTaskList);
-  document.querySelector(selectors.filterStatus)?.addEventListener('change', renderTaskList);
 
   // Multi-select Category Filter Event Listeners
   const filterCategoryHeader = document.querySelector(selectors.filterCategoryHeader);
@@ -100,10 +108,24 @@ export async function initLeftMenuTaskUI(initialState, onOpenTaskEditor) {
     });
   }
 
-  // Close multi-select dropdown if clicked outside
+  // Multi-select Status Filter Event Listeners
+  const filterStatusHeader = document.querySelector(selectors.filterStatusHeader);
+  const filterStatusDropdownContent = document.querySelector(selectors.filterStatusDropdownContent);
+
+  if (filterStatusHeader) {
+    filterStatusHeader.addEventListener('click', (event) => {
+      filterStatusDropdownContent?.classList.toggle('show');
+      event.stopPropagation(); // Prevent closing immediately
+    });
+  }
+
+  // Close all multi-select dropdowns if clicked outside
   window.addEventListener('click', (event) => {
     if (filterCategoryDropdownContent && !event.target.closest(selectors.filterCategoryMultiSelect) && filterCategoryDropdownContent.classList.contains('show')) {
       filterCategoryDropdownContent.classList.remove('show');
+    }
+    if (filterStatusDropdownContent && !event.target.closest(selectors.filterStatusMultiSelect) && filterStatusDropdownContent.classList.contains('show')) {
+      filterStatusDropdownContent.classList.remove('show');
     }
   });
 
@@ -121,7 +143,7 @@ export async function initLeftMenuTaskUI(initialState, onOpenTaskEditor) {
 
   // Initial rendering
   renderFilterCategoriesMultiSelect();
-  renderStatusOptions();
+  renderFilterStatusMultiSelect(); // Render the new status multi-select
   await renderTaskList();
 }
 
@@ -135,6 +157,7 @@ export function updateLeftMenuTaskUIState(updatedState) {
   if (updatedState.statuses) statuses = updatedState.statuses;
   if (updatedState.filterSectionVisible !== undefined) filterSectionVisible = updatedState.filterSectionVisible;
   if (updatedState.selectedFilterCategories) selectedFilterCategories = updatedState.selectedFilterCategories;
+  if (updatedState.selectedFilterStatuses) selectedFilterStatuses = updatedState.selectedFilterStatuses;
   
   // Re-apply visibility and re-render filters if state changes
   const appContainer = document.querySelector('.app');
@@ -142,7 +165,7 @@ export function updateLeftMenuTaskUIState(updatedState) {
     appContainer.classList.toggle('filter-active', filterSectionVisible);
   }
   renderFilterCategoriesMultiSelect();
-  renderStatusOptions();
+  renderFilterStatusMultiSelect(); // Re-render the new status multi-select
 }
 
 
@@ -155,7 +178,8 @@ export async function renderTaskList() {
   container.innerHTML = '';
   const tasks = await DB.getAllTasks();
   const q = document.querySelector(selectors.searchInput)?.value.toLowerCase() || '';
-  const filterStat = document.querySelector(selectors.filterStatus)?.value || '__all';
+  // Removed old filterStat variable as it's replaced by selectedFilterStatuses
+
   const sortVal = document.querySelector(selectors.sortBy)?.value || 'updatedAt';
   const groupVal = document.querySelector(selectors.groupBy)?.value || '__none';
 
@@ -180,8 +204,11 @@ export async function renderTaskList() {
         if (!taskHasSelectedCategory) return false;
     }
 
-    // Status filter
-    if (filterStat !== '__all' && t.status !== filterStat) return false;
+    // Status filter (multi-select)
+    // If selectedFilterStatuses is empty, it means "select all" (no filter applied)
+    if (selectedFilterStatuses.length > 0) {
+        if (!selectedFilterStatuses.includes(t.status)) return false;
+    }
     
     // Date filters (adjusting endDate to include the whole day)
     const checkDateRange = (taskDateStr, fromDateStr, toDateStr) => {
@@ -203,7 +230,6 @@ export async function renderTaskList() {
     if ((finishedRF || finishedRT)) {
       if (!t.finishDate || !checkDateRange(t.finishDate, finishedRF, finishedRT)) return false;
     }
-
 
     return true;
   });
@@ -484,11 +510,60 @@ export async function renderFilterCategoriesMultiSelect() {
 }
 
 /**
- * Renders the status options in the filter dropdown.
+ * Renders the multi-select status filter UI.
  */
-export function renderStatusOptions() {
-  const sel = document.querySelector(selectors.filterStatus);
-  if (sel) {
-    sel.innerHTML = '<option value="__all">All</option>' + statuses.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('\n');
+export async function renderFilterStatusMultiSelect() {
+  const selectedDisplay = document.querySelector(selectors.selectedFilterStatusesDisplay);
+  const dropdownContent = document.querySelector(selectors.filterStatusDropdownContent);
+
+  if (!selectedDisplay || !dropdownContent) return;
+
+  selectedDisplay.innerHTML = ''; // Clear current selected tags
+  dropdownContent.innerHTML = ''; // Clear current dropdown items
+
+  // Render selected statuses as tags in the header
+  if (selectedFilterStatuses.length === 0) {
+    selectedDisplay.innerHTML = '<span class="placeholder-text">All Statuses</span>';
+  } else {
+    selectedFilterStatuses.forEach((status) => {
+      const tag = document.createElement('div');
+      tag.className = 'selected-tag';
+      tag.innerHTML = `${escapeHtml(status)}<button data-status="${escapeHtml(status)}">x</button>`;
+      tag.querySelector('button')?.addEventListener('click', async (e) => {
+        e.stopPropagation(); // Prevent dropdown from closing
+        const statusToRemove = e.target.dataset.status;
+        selectedFilterStatuses = selectedFilterStatuses.filter(s => s !== statusToRemove);
+        await DB.putMeta('selectedFilterStatuses', selectedFilterStatuses); // Persist
+        renderFilterStatusMultiSelect();
+        renderTaskList();
+      });
+      selectedDisplay.appendChild(tag);
+    });
   }
+
+  // Render all statuses in the dropdown content
+  statuses.forEach(status => {
+    const item = document.createElement('div');
+    item.className = 'dropdown-item';
+    item.textContent = escapeHtml(status);
+    if (selectedFilterStatuses.includes(status)) {
+      item.classList.add('selected');
+    }
+
+    item.addEventListener('click', async (e) => {
+      e.stopPropagation(); // Prevent dropdown from closing immediately on item click
+
+      if (selectedFilterStatuses.includes(status)) {
+        // Remove if already selected
+        selectedFilterStatuses = selectedFilterStatuses.filter(s => s !== status);
+      } else {
+        // Add if not selected
+        selectedFilterStatuses.push(status);
+      }
+      await DB.putMeta('selectedFilterStatuses', selectedFilterStatuses); // Persist
+      renderFilterStatusMultiSelect(); // Re-render this filter UI
+      renderTaskList(); // Re-render task list based on new filter
+    });
+    dropdownContent.appendChild(item);
+  });
 }

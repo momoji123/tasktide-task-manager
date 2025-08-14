@@ -50,7 +50,6 @@
     .filters-collapsible {
       /* This ensures the content itself is visible within its parent container */
       display: block; 
-      overflow-y: auto; /* Enable scrolling for content if it overflows */
     }
 
     /* Style for the date inputs to make them align nicely */
@@ -168,7 +167,19 @@
           </div>
           
           <label>Status</label>
-          <select id="filterStatus"><option value="__all">All</option></select>
+          <!-- Multi-select Status Filter -->
+          <div id="filterStatusMultiSelect" class="multi-select-dropdown">
+            <div class="multi-select-header">
+              <div class="selected-tags" id="selectedFilterStatusesDisplay">
+                <!-- Selected statuses will be rendered here as tags -->
+                <span class="placeholder-text">All Statuses</span>
+              </div>
+              <span class="dropdown-arrow">&#9660;</span> <!-- Dropdown arrow -->
+            </div>
+            <div id="filterStatusDropdownContent" class="multi-select-dropdown-content">
+              <!-- All statuses will be rendered here as clickable items -->
+            </div>
+          </div>
         </section>
       </div>
       <!-- Group By Section - moved here to be part of the filter column -->
