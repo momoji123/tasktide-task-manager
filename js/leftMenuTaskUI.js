@@ -12,6 +12,7 @@ let filterSectionVisible = true;
 let selectedFilterCategories = [];
 let selectedFilterStatuses = []; // New state for multi-select status filter
 let openTaskEditorCallback = null; // Callback to open the task editor
+let currentSelectedTaskId = null; // New state to hold the ID of the currently selected task
 
 const selectors = {
   newTaskBtn: '#newTaskBtn',
@@ -55,7 +56,16 @@ export async function initLeftMenuTaskUI(initialState, onOpenTaskEditor) {
   selectedFilterCategories = initialState.selectedFilterCategories;
   // Initialize selectedFilterStatuses from storage or default to empty array
   selectedFilterStatuses = initialState.selectedFilterStatuses || []; 
-  openTaskEditorCallback = onOpenTaskEditor;
+  
+  // Wrap the original onOpenTaskEditor to also track the selected task ID
+  openTaskEditorCallback = async (task) => {
+    currentSelectedTaskId = task ? task.id : null; // Set current selected task ID
+    // No need to call renderTaskList here as it will be called by updateLeftMenuTaskUIState
+    // and also the click handler on task items which also triggers renderTaskList.
+    if (onOpenTaskEditor) {
+      onOpenTaskEditor(task);
+    }
+  };
 
   // Apply initial filter section visibility state
   const appContainer = document.querySelector('.app');
@@ -65,6 +75,10 @@ export async function initLeftMenuTaskUI(initialState, onOpenTaskEditor) {
 
   // Set up event listeners for inputs
   document.querySelector(selectors.newTaskBtn)?.addEventListener('click', () => {
+    // Clear current selected task when creating a new one
+    currentSelectedTaskId = null;
+    renderTaskList(); // Re-render to clear any existing selection highlight
+
     const id = 't_' + Date.now();
     const emptyTask = {
       id,
@@ -158,6 +172,8 @@ export function updateLeftMenuTaskUIState(updatedState) {
   if (updatedState.filterSectionVisible !== undefined) filterSectionVisible = updatedState.filterSectionVisible;
   if (updatedState.selectedFilterCategories) selectedFilterCategories = updatedState.selectedFilterCategories;
   if (updatedState.selectedFilterStatuses) selectedFilterStatuses = updatedState.selectedFilterStatuses;
+  // Also update currentSelectedTaskId if it's part of the updatedState, though it usually comes from openTaskEditorCallback
+  if (updatedState.currentSelectedTaskId !== undefined) currentSelectedTaskId = updatedState.currentSelectedTaskId;
   
   // Re-apply visibility and re-render filters if state changes
   const appContainer = document.querySelector('.app');
@@ -166,6 +182,7 @@ export function updateLeftMenuTaskUIState(updatedState) {
   }
   renderFilterCategoriesMultiSelect();
   renderFilterStatusMultiSelect(); // Re-render the new status multi-select
+  renderTaskList(); // Re-render task list after state changes
 }
 
 
@@ -175,7 +192,7 @@ export function updateLeftMenuTaskUIState(updatedState) {
 export async function renderTaskList() {
   const container = document.querySelector(selectors.taskList);
   if (!container) return; // Ensure container exists
-  container.innerHTML = '';
+  container.innerHTML = ''; // Clear existing tasks to prevent duplication
   const tasks = await DB.getAllTasks();
   const q = document.querySelector(selectors.searchInput)?.value.toLowerCase() || '';
   // Removed old filterStat variable as it's replaced by selectedFilterStatuses
@@ -420,6 +437,9 @@ function renderTaskItems(container, tasksToRender) {
   const tmpl = document.getElementById('task-item-template')?.content;
   if (!tmpl) return; // Ensure template exists
 
+  // The container.innerHTML = ''; is handled by renderTaskList()
+  // No need to clear here again as this function is called by renderTaskList()
+
   tasksToRender.forEach(t => {
     const node = tmpl.cloneNode(true);
     const el = node.querySelector('.task-item');
@@ -443,7 +463,18 @@ function renderTaskItems(container, tasksToRender) {
       finishDateDisplay.textContent = finishDateText;
     }
 
+    // Add selected-task-item class if this task is the currently selected one
+    if (t.id === currentSelectedTaskId) {
+      el.classList.add('selected-task-item');
+    } else {
+      el.classList.remove('selected-task-item'); // Ensure it's removed if not selected
+    }
+
     el.addEventListener('click', () => {
+      // Update the currentSelectedTaskId and re-render the task list
+      // This will ensure the previous selection is un-styled and the new one is styled.
+      currentSelectedTaskId = t.id;
+      renderTaskList(); 
       if (openTaskEditorCallback) openTaskEditorCallback(t);
     });
     container.appendChild(node);

@@ -597,3 +597,10 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
   padding: 8px;
   border-radius: 6px;
 }
+
+/* New style for selected task item in the list */
+.task-item.selected-task-item {
+    border-color: var(--accent); /* Highlight border */
+    background-color: #eef2ff; /* Light background for selected item */
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Subtle shadow for emphasis */
+}
