@@ -19,6 +19,7 @@ export const UI = (function() {
   let froms = [];
   let filterSectionVisible = true;
   let selectedFilterCategories = [];
+  let username = null; // Added username state
 
   /**
    * Initializes the entire application UI.
@@ -35,6 +36,7 @@ export const UI = (function() {
     froms = (await DB.getMeta('froms')) || ['Work', 'Personal', 'Shopping'];
     filterSectionVisible = (await DB.getMeta('filterSectionVisible')) ?? true;
     selectedFilterCategories = (await DB.getMeta('selectedFilterCategories')) || [];
+    username = (await DB.getMeta('username')) || null; // Load username
 
     // 2. Prepare initial state object for passing to components
     const commonState = {
@@ -42,23 +44,34 @@ export const UI = (function() {
       statuses: statuses,
       froms: froms,
       filterSectionVisible: filterSectionVisible,
-      selectedFilterCategories: selectedFilterCategories
+      selectedFilterCategories: selectedFilterCategories,
+      username: username // Pass username to common state
+    };
+
+    // Callback to update the username in UI's global state
+    const updateUsernameInUI = (newUsername) => {
+        username = newUsername;
+        // Also update the state of modules that depend on username
+        TaskEditorUI.updateTaskEditorUIState({ username: newUsername });
+        MilestoneEditorUI.updateMilestoneEditorUIState({ username: newUsername });
+        // Re-render task list after username update to reflect permissions/creator info
+        LeftMenuTaskUI.renderTaskList();
     };
 
     // 3. Initialize individual UI components, passing necessary state and callbacks
     // Callbacks are crucial for inter-component communication without direct coupling.
 
     // HeaderUI needs: initial state, and callbacks to re-render task list, categories filter, and status options
-    // Also pass callbacks to update other UI modules' states
+    // Also pass callbacks to update other UI modules' states, and the new username update callback
     HeaderUI.initHeader(
       commonState,
       LeftMenuTaskUI.renderTaskList,
       LeftMenuTaskUI.renderFilterCategoriesMultiSelect,
       LeftMenuTaskUI.renderStatusOptions,
-      // New callbacks for state propagation
       LeftMenuTaskUI.updateLeftMenuTaskUIState,
       TaskEditorUI.updateTaskEditorUIState,
-      MilestoneEditorUI.updateMilestoneEditorUIState
+      MilestoneEditorUI.updateMilestoneEditorUIState,
+      updateUsernameInUI // Pass the new callback
     );
 
     // LeftMenuTaskUI needs: initial state, and callback to open the task viewer (default)
@@ -89,6 +102,12 @@ export const UI = (function() {
 
     // Handle new task button: it should open the editor directly for new tasks
     document.getElementById('newTaskBtn')?.addEventListener('click', () => {
+        // Enforce username check before creating a new task
+        if (!username) {
+            showModalAlert('Please set your username in Settings before creating tasks or milestones.');
+            return;
+        }
+
         TaskEditorUI.openTaskEditor({
             id: 't_' + Date.now(),
             title: '',
@@ -102,7 +121,8 @@ export const UI = (function() {
             categories: [],
             attachments: [],
             createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date().toISOString(),
+            creator: null // Initialize creator as null; it will be set on first save if empty
         });
     });
 
@@ -111,4 +131,3 @@ export const UI = (function() {
   // Expose init function
   return { init };
 })();
-

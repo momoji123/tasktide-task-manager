@@ -9,10 +9,12 @@ import { escapeHtml, showModalAlert, showModalAlertConfirm } from './utilUI.js';
 let categories = [];
 let statuses = [];
 let froms = [];
+let username = null; // Added username state
 let renderTaskListCallback = null; // Callback to trigger task list re-render in leftMenuTaskUI
 let updateLeftMenuTaskUICallback = null; // New callback
 let updateTaskEditorUICallback = null;   // New callback
 let updateMilestoneEditorUICallback = null; // New callback
+let updateUsernameCallback = null; // New callback to update username in UI module
 
 const selectors = {
   exportBtn: '#exportBtn',
@@ -23,19 +25,21 @@ const selectors = {
   manageCategoriesBtn: '#manageCategoriesBtn',
   manageStatusesBtn: '#manageStatusesBtn',
   manageFromsBtn: '#manageFromsBtn',
+  manageUsernameBtn: '#manageUsernameBtn', // New selector for username setting
   clearAllBtn: '#clearAllBtn',
   filterCategoryMultiSelect: '#filterCategoryMultiSelect', // Needed for dropdown close logic
 };
 
 /**
  * Initializes header-related event listeners and state.
- * @param {object} initialState - Object containing initial categories, statuses, froms.
+ * @param {object} initialState - Object containing initial categories, statuses, froms, and username.
  * @param {function} onRenderTaskList - Callback function to re-render the task list.
  * @param {function} onRenderFilterCategoriesMultiSelect - Callback to re-render category filter.
  * @param {function} onRenderStatusOptions - Callback to re-render status filter options.
  * @param {function} onUpdateLeftMenuTaskUI - Callback to update LeftMenuTaskUI's state.
  * @param {function} onUpdateTaskEditorUI - Callback to update TaskEditorUI's state.
  * @param {function} onUpdateMilestoneEditorUI - Callback to update MilestoneEditorUI's state.
+ * @param {function} onUpdateUsername - Callback to update the username in the main UI module.
  */
 export function initHeader(
   initialState,
@@ -44,17 +48,20 @@ export function initHeader(
   onRenderStatusOptions,
   onUpdateLeftMenuTaskUI, // New parameter
   onUpdateTaskEditorUI,   // New parameter
-  onUpdateMilestoneEditorUI // New parameter
+  onUpdateMilestoneEditorUI, // New parameter
+  onUpdateUsername // New parameter
 ) {
   categories = initialState.categories;
   statuses = initialState.statuses;
   froms = initialState.froms;
+  username = initialState.username; // Initialize username
   renderTaskListCallback = onRenderTaskList; // Store callback for later use
   const renderFilterCategoriesMultiSelectCallback = onRenderFilterCategoriesMultiSelect;
   const renderStatusOptionsCallback = onRenderStatusOptions;
   updateLeftMenuTaskUICallback = onUpdateLeftMenuTaskUI;     // Store new callback
   updateTaskEditorUICallback = onUpdateTaskEditorUI;       // Store new callback
   updateMilestoneEditorUICallback = onUpdateMilestoneEditorUI; // Store new callback
+  updateUsernameCallback = onUpdateUsername; // Store new callback
 
   // Event listener for the new settings button to toggle the dropdown
   const settingsBtn = document.querySelector(selectors.settingsBtn);
@@ -78,6 +85,7 @@ export function initHeader(
   document.querySelector(selectors.manageCategoriesBtn)?.addEventListener('click', () => manageList('categories', 'Manage Categories', renderFilterCategoriesMultiSelectCallback, renderStatusOptionsCallback));
   document.querySelector(selectors.manageStatusesBtn)?.addEventListener('click', () => manageList('statuses', 'Manage Statuses', renderFilterCategoriesMultiSelectCallback, renderStatusOptionsCallback));
   document.querySelector(selectors.manageFromsBtn)?.addEventListener('click', () => manageList('froms', 'Manage "From" Sources', renderFilterCategoriesMultiSelectCallback, renderStatusOptionsCallback));
+  document.querySelector(selectors.manageUsernameBtn)?.addEventListener('click', () => manageUsername(updateUsernameCallback)); // New: Event listener for username
   document.querySelector(selectors.clearAllBtn)?.addEventListener('click', clearAllData); // Event listener for clear all
 
   document.querySelector(selectors.exportBtn)?.addEventListener('click', exportJSON);
@@ -86,14 +94,15 @@ export function initHeader(
 }
 
 /**
- * Updates the internal lists (categories, statuses, froms).
+ * Updates the internal lists (categories, statuses, froms) and username.
  * This function is called from the main UI module when global state changes.
- * @param {object} updatedState - Object with updated lists.
+ * @param {object} updatedState - Object with updated lists and/or username.
  */
 export function updateHeaderState(updatedState) {
   if (updatedState.categories) categories = updatedState.categories;
   if (updatedState.statuses) statuses = updatedState.statuses;
   if (updatedState.froms) froms = updatedState.froms;
+  if (updatedState.username !== undefined) username = updatedState.username; // Update username
 }
 
 
@@ -288,6 +297,64 @@ async function manageList(type, title, renderFilterCategoriesMultiSelectCallback
 }
 
 /**
+ * Manages the username setting through a modal.
+ * @param {function} onUpdateUsernameCallback - Callback to update the username in the main UI module.
+ */
+async function manageUsername(onUpdateUsernameCallback) {
+  let currentUsername = (await DB.getMeta('username')) || ''; // Get current username
+
+  // Get the modal template and clone it
+  const modalTemplate = document.getElementById('modal-template');
+  if (!modalTemplate) {
+    console.error('Modal template not found.');
+    return;
+  }
+  const modalClone = modalTemplate.content.cloneNode(true);
+  const modalBackdrop = modalClone.querySelector('.modal-backdrop');
+  const modalHeaderTitle = modalClone.querySelector('.modal-header h3');
+  const modalBody = modalClone.querySelector('.modal-body');
+  const saveBtn = modalClone.querySelector('.modal-save');
+  const cancelBtn = modalClone.querySelector('.modal-cancel');
+  const closeBtn = modalClone.querySelector('.modal-close');
+
+  modalHeaderTitle.textContent = 'Set Username';
+
+  modalBody.innerHTML = `
+    <div class="username-manager-container">
+      <p>Your username is required to save and delete tasks and milestones. This helps organize your data on the server.</p>
+      <input type="text" id="usernameInput" placeholder="Enter your username" value="${escapeHtml(currentUsername)}" class="w-full mt-4 p-2 border rounded">
+    </div>
+  `;
+
+  document.body.appendChild(modalBackdrop);
+
+  const usernameInput = modalBody.querySelector('#usernameInput');
+
+  return new Promise(resolve => {
+    const cleanupAndResolve = (saved) => {
+      modalBackdrop.remove();
+      resolve(saved);
+    };
+
+    saveBtn.onclick = async () => {
+      const newUsername = usernameInput.value.trim();
+      if (newUsername) {
+        await DB.putMeta('username', newUsername); // Save username to IndexedDB
+        username = newUsername; // Update local state
+        if (onUpdateUsernameCallback) onUpdateUsernameCallback(newUsername); // Update global UI state
+        showModalAlert('Username saved successfully!');
+        cleanupAndResolve(true);
+      } else {
+        showModalAlert('Username cannot be empty. Please enter a valid username.');
+      }
+    };
+    cancelBtn.onclick = () => cleanupAndResolve(false);
+    closeBtn.onclick = () => cleanupAndResolve(false);
+  });
+}
+
+
+/**
  * Clears all persisted data from IndexedDB.
  */
 async function clearAllData() {
@@ -331,7 +398,8 @@ async function exportJSON() {
       tasks: tasksWithMilestones, // Include tasks with nested milestones
       categories: categories,
       statuses: statuses,
-      froms: froms
+      froms: froms,
+      username: username // Include username in export
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], {
     type: 'application/json'
@@ -370,6 +438,11 @@ async function importJSON(e) {
       froms = j.froms;
       if (updateLeftMenuTaskUICallback) updateLeftMenuTaskUICallback({ froms: froms });
       if (updateTaskEditorUICallback) updateTaskEditorUICallback({ froms: froms });
+    }
+    if (j.username !== undefined) { // Import username
+        username = j.username;
+        await DB.putMeta('username', username);
+        if (updateUsernameCallback) updateUsernameCallback(username);
     }
     
     if (j.tasks) {

@@ -11,9 +11,14 @@ let currentTask = null;
 let categories = [];
 let statuses = [];
 let froms = [];
+let currentUsername = null; // Added current username
 let renderTaskListCallback = null; // Callback to re-render the task list after save/delete
 let openMilestonesViewCallback = null; // Callback to open the milestone view
 let openTaskViewerCallback = null; // New: Callback to open the task viewer
+
+// Editor instances for description and notes
+let descEditorInstance = null;
+let notesEditorInstance = null;
 
 const selectors = {
   editorArea: '#editorArea',
@@ -38,7 +43,7 @@ const selectors = {
 
 /**
  * Initializes the Task Editor module.
- * @param {object} initialState - Object containing initial categories, statuses, froms.
+ * @param {object} initialState - Object containing initial categories, statuses, froms, and username.
  * @param {function} onRenderTaskList - Callback to re-render the task list.
  * @param {function} onOpenMilestonesView - Callback to open the milestone view for a task.
  * @param {function} onOpenTaskViewer - New: Callback to open the task viewer for a task.
@@ -47,32 +52,87 @@ export function initTaskEditorUI(initialState, onRenderTaskList, onOpenMilestone
   categories = initialState.categories;
   statuses = initialState.statuses;
   froms = initialState.froms;
+  currentUsername = initialState.username; // Initialize username
   renderTaskListCallback = onRenderTaskList;
   openMilestonesViewCallback = onOpenMilestonesView;
   openTaskViewerCallback = onOpenTaskViewer; // Initialize new callback
 }
 
 /**
- * Updates the internal lists (categories, statuses, froms).
+ * Updates the internal lists (categories, statuses, froms) and username.
  * This function is called from the main UI module when global state changes.
- * @param {object} updatedState - Object with updated lists.
+ * @param {object} updatedState - Object with updated lists and/or username.
  */
 export function updateTaskEditorUIState(updatedState) {
   if (updatedState.categories) categories = updatedState.categories;
   if (updatedState.statuses) statuses = updatedState.statuses;
   if (updatedState.froms) froms = updatedState.froms;
-  // If the editor is open, re-render its dropdowns
-  if (currentTask && document.querySelector(selectors.taskEditor)?.style.display !== 'none') {
+  if (updatedState.username !== undefined) currentUsername = updatedState.username; // Update username
+
+  // If the editor is open, re-render its dropdowns and update button states
+  const editorContainer = document.querySelector(selectors.taskEditor);
+  if (currentTask && editorContainer && editorContainer.style.display !== 'none') {
     // Re-render select elements if categories/statuses/froms changed
-    const editorArea = document.querySelector(selectors.editorArea);
-    if (editorArea && editorArea.contains(document.querySelector(selectors.taskFromSelect))) {
-      renderFromOptions(editorArea);
-      renderStatusOptions(editorArea);
+    if (editorContainer.contains(document.querySelector(selectors.taskFromSelect))) {
+      renderFromOptions(editorContainer);
+      renderStatusOptions(editorContainer);
       renderCategoryTags(); // Re-render categories assigned to the task
       renderNewCategoryDropdown(); // Re-render the "Add category" dropdown
     }
+    updateButtonStates(editorContainer); // Update button states based on username
   }
 }
+
+/**
+ * Updates the enabled/disabled state of action buttons based on the current username.
+ * @param {HTMLElement} editorContainer - The container for the task editor.
+ */
+function updateButtonStates(editorContainer) {
+  const saveBtn = editorContainer.querySelector(selectors.saveTaskBtn);
+  const deleteBtn = editorContainer.querySelector(selectors.deleteTaskBtn);
+  const openMilestonesBtn = editorContainer.querySelector(selectors.openMilestonesBtn);
+
+  // Buttons are enabled only if a username is set AND the task's creator matches
+  // or the task has no creator (meaning it's a new task that the current user will create)
+  const canEditOrDelete = currentUsername && 
+                          (currentTask.creator === currentUsername || currentTask.creator === null);
+
+  if (saveBtn) {
+    saveBtn.disabled = !canEditOrDelete;
+  }
+  if (deleteBtn) {
+    deleteBtn.disabled = !canEditOrDelete;
+  }
+  if (openMilestonesBtn) {
+    // Milestones can only be opened if a username is set and the task has a creator
+    openMilestonesBtn.disabled = !currentUsername || !currentTask.creator; 
+  }
+
+  // Set editability for rich text areas using their instances
+  if (descEditorInstance) {
+    descEditorInstance.setEditable(canEditOrDelete);
+  }
+  if (notesEditorInstance) {
+    notesEditorInstance.setEditable(canEditOrDelete);
+  }
+
+  // For other inputs (not text-area)
+  editorContainer.querySelectorAll('input, select').forEach(input => {
+    input.disabled = !canEditOrDelete;
+  });
+
+  // Category add button
+  const addCategoryBtn = editorContainer.querySelector(selectors.addCategoryBtn);
+  const newCategorySelect = editorContainer.querySelector(selectors.newCategorySelect);
+  if (addCategoryBtn) addCategoryBtn.disabled = !canEditOrDelete;
+  if (newCategorySelect) newCategorySelect.disabled = !canEditOrDelete;
+
+  // Attachment remove buttons
+  editorContainer.querySelectorAll('.attachment button').forEach(button => {
+    button.disabled = !canEditOrDelete;
+  });
+}
+
 
 /**
  * Opens the task editor for a given task.
@@ -167,17 +227,22 @@ export function openTaskEditor(task) {
     renderAttachments();
   };
 
-  // Initialize rich text editors using the editorContainer
-  Editor.init(editorContainer.querySelector(selectors.descEditor), { onAttach: handleAttachment });
+  // Initialize rich text editors and store their instances
+  descEditorInstance = Editor.init(editorContainer.querySelector(selectors.descEditor), { onAttach: handleAttachment });
   editorContainer.querySelector(selectors.descEditor + ' .text-area').innerHTML = task.description;
 
-  Editor.init(editorContainer.querySelector(selectors.notesEditor), { onAttach: handleAttachment });
+  notesEditorInstance = Editor.init(editorContainer.querySelector(selectors.notesEditor), { onAttach: handleAttachment });
   editorContainer.querySelector(selectors.notesEditor + ' .text-area').innerHTML = task.notes;
 
   // Add event listeners for task actions
   editorContainer.querySelector(selectors.saveTaskBtn)?.addEventListener('click', saveTask);
   editorContainer.querySelector(selectors.deleteTaskBtn)?.addEventListener('click', deleteTask);
   editorContainer.querySelector(selectors.openMilestonesBtn)?.addEventListener('click', () => {
+    // Check if task has a creator before opening milestones
+    if (!currentTask.creator) {
+      showModalAlert('Please save the task first to set its creator before managing milestones.');
+      return;
+    }
     if (openMilestonesViewCallback) openMilestonesViewCallback(currentTask.id, currentTask.title);
   });
 
@@ -196,6 +261,8 @@ export function openTaskEditor(task) {
     }
     select.value = '__placeholder'; // Reset dropdown
   });
+
+  updateButtonStates(editorContainer); // Call to set initial button states
 }
 
 /**
@@ -223,10 +290,15 @@ function renderStatusOptions(container) {
 /**
  * Sends task data to the Python server.
  * @param {object} task - The task object to save.
+ * @param {string} username - The username of the task creator.
  */
-async function saveTaskToServer(task) {
+async function saveTaskToServer(task, username) {
+    if (!username) {
+        showModalAlert('Error: Username is not set. Cannot save task.');
+        return;
+    }
     try {
-        const response = await fetch(`http://localhost:12345/save-task/${task.id}`, {
+        const response = await fetch(`http://localhost:12345/save-task/${username}/${task.id}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
@@ -250,10 +322,15 @@ async function saveTaskToServer(task) {
 /**
  * Deletes a task and its associated folder from the Python server.
  * @param {string} taskId - The ID of the task to delete.
+ * @param {string} username - The username of the task creator.
  */
-async function deleteTaskFromServer(taskId) {
+async function deleteTaskFromServer(taskId, username) {
+    if (!username) {
+        showModalAlert('Error: Username is not set. Cannot delete task.');
+        return;
+    }
     try {
-        const response = await fetch(`http://localhost:12345/delete-task/${taskId}`, {
+        const response = await fetch(`http://localhost:12345/delete-task/${username}/${taskId}`, {
             method: 'DELETE'
         });
 
@@ -276,6 +353,13 @@ async function deleteTaskFromServer(taskId) {
  */
 async function saveTask() {
   if (!currentTask) return;
+
+  // Enforce username requirement
+  if (!currentUsername) {
+      showModalAlert('Please set your username in Settings before saving tasks.');
+      return;
+  }
+
   const editorContainer = document.querySelector(selectors.taskEditor);
   if (!editorContainer) return;
 
@@ -285,12 +369,22 @@ async function saveTask() {
   currentTask.deadline = editorContainer.querySelector(selectors.taskDeadlineInput)?.value || null;
   currentTask.finishDate = editorContainer.querySelector(selectors.taskFinishDateInput)?.value || null;
   currentTask.status = editorContainer.querySelector(selectors.taskStatusSelect)?.value || '';
-  currentTask.description = editorContainer.querySelector(selectors.descEditor + ' .text-area')?.innerHTML || '';
-  currentTask.notes = editorContainer.querySelector(selectors.notesEditor + ' .text-area')?.innerHTML || '';
+  currentTask.description = (descEditorInstance) ? descEditorInstance.getHTML() : '';
+  currentTask.notes = (notesEditorInstance) ? notesEditorInstance.getHTML() : '';
   currentTask.updatedAt = new Date().toISOString();
 
-  let newObj = await DB.putTask(currentTask); // Save to IndexedDB
-  await saveTaskToServer(currentTask); // Save to Python server
+  // Set creator if it's a new task (i.e., creator is null/undefined)
+  if (!currentTask.creator) {
+      currentTask.creator = currentUsername;
+  } else if (currentTask.creator !== currentUsername) {
+      // If task has a creator but it's not the current user, prevent saving.
+      // This case should ideally be covered by updateButtonStates, but a server-side check is good too.
+      showModalAlert(`You can only modify tasks created by "${currentTask.creator}".`);
+      return;
+  }
+
+  await DB.putTask(currentTask); // Save to IndexedDB
+  await saveTaskToServer(currentTask, currentTask.creator); // Pass creator for server path
 
 
   if (renderTaskListCallback) await renderTaskListCallback(); // Re-render task list
@@ -309,11 +403,18 @@ async function saveTask() {
  */
 async function deleteTask() {
   if (!currentTask) return;
+
+  // Enforce username requirement and creator match
+  if (!currentUsername || currentTask.creator !== currentUsername) {
+      showModalAlert('You can only delete tasks created by you. Please set your username in Settings or select a task you created.');
+      return;
+  }
+
   const confirmed = await showModalAlertConfirm(`Are you sure you want to delete task "${escapeHtml(currentTask.title)}"? This will also delete all associated milestones.`);
 
   if (confirmed) {
     await DB.deleteTask(currentTask.id); // Delete from IndexedDB
-    await deleteTaskFromServer(currentTask.id); // Delete from Python server
+    await deleteTaskFromServer(currentTask.id, currentTask.creator); // Pass creator for server path
 
     // Call clearEditorArea to reset the UI safely
     clearEditorArea();
@@ -330,15 +431,23 @@ function renderCategoryTags() {
   const list = document.querySelector(selectors.categoryList);
   if (!list) return;
   list.innerHTML = '';
+  // Check if currentTask.categories is defined before iterating
   (currentTask.categories || []).forEach((cat, idx) => {
     const tag = document.createElement('div');
     tag.className = 'tag selected';
     tag.innerHTML = `${escapeHtml(cat)}<button>x</button>`;
-    tag.querySelector('button')?.addEventListener('click', () => {
-      currentTask.categories.splice(idx, 1);
-      renderCategoryTags();
-      renderNewCategoryDropdown(); // Re-render dropdown when a tag is removed
-    });
+    // Disable remove button if current user is not the creator or no username is set
+    const removeButton = tag.querySelector('button');
+    if (removeButton) {
+      removeButton.disabled = !currentUsername || currentTask.creator !== currentUsername;
+      if (!removeButton.disabled) {
+        removeButton.addEventListener('click', () => {
+          currentTask.categories.splice(idx, 1);
+          renderCategoryTags();
+          renderNewCategoryDropdown(); // Re-render dropdown when a tag is removed
+        });
+      }
+    }
     list.appendChild(tag);
   });
 }
@@ -355,7 +464,14 @@ function renderNewCategoryDropdown() {
 
   select.innerHTML = '<option value="__placeholder" disabled selected>Add category...</option>' +
                      availableCategories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('\n');
+  
+  // Disable if not editable
+  const addCategoryBtn = document.querySelector(selectors.addCategoryBtn);
+  const canEdit = currentUsername && currentTask.creator === currentUsername;
+  select.disabled = !canEdit;
+  if (addCategoryBtn) addCategoryBtn.disabled = !canEdit;
 }
+
 
 /**
  * Renders the attachments list for the current task.
@@ -364,18 +480,26 @@ function renderAttachments(){
   const el = document.querySelector(selectors.attachmentsList);
   if (!el) return;
   el.innerHTML = '';
+  const canEdit = currentUsername && currentTask.creator === currentUsername; // Check if current user is creator
+
   (currentTask.attachments || []).forEach((att, idx)=>{
     const div = document.createElement('div'); div.className = 'attachment';
     const left = document.createElement('div'); left.textContent = att.name;
     const right = document.createElement('div');
     const dl = document.createElement('a'); dl.href = att.data; dl.download = att.name; dl.textContent = 'download';
-    const rm = document.createElement('button'); rm.textContent='remove'; rm.addEventListener('click', async ()=>{
-      const confirmed = await showModalAlertConfirm(`Are you sure you want to remove "${escapeHtml(att.name)}"?`);
-      if (confirmed) {
-        currentTask.attachments.splice(idx,1);
-        renderAttachments();
-      }
-    });
+    const rm = document.createElement('button'); rm.textContent='remove'; 
+    
+    // Disable remove button based on permissions
+    rm.disabled = !canEdit;
+    if (canEdit) {
+      rm.addEventListener('click', async ()=>{
+        const confirmed = await showModalAlertConfirm(`Are you sure you want to remove "${escapeHtml(att.name)}"?`);
+        if (confirmed) {
+          currentTask.attachments.splice(idx,1);
+          renderAttachments();
+        }
+      });
+    }
     right.appendChild(dl); right.appendChild(document.createTextNode(' ')); right.appendChild(rm);
     div.appendChild(left); div.appendChild(right); el.appendChild(div);
   });
@@ -406,4 +530,7 @@ export function clearEditorArea() {
       document.querySelector(selectors.editorArea).innerHTML = '<div class="placeholder">Select or create a task to view/edit details</div>';
   }
   currentTask = null;
+  // Clear editor instances when clearing the area
+  descEditorInstance = null;
+  notesEditorInstance = null;
 }

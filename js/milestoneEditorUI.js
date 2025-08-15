@@ -10,8 +10,13 @@ import { escapeHtml, showModalAlert, showModalAlertConfirm } from './utilUI.js';
 let statuses = [];
 let currentMilestone = null; // Stores the milestone currently being edited
 let currentTaskId = null; // Stores the ID of the task this milestone belongs to
+let currentUsername = null; // Added current username
+let taskCreator = null; // Stores the creator of the parent task
 let renderMilestoneBubblesCallback = null; // Callback to re-render the milestone graph
 let updateCurrentMilestoneCallback = null; // Callback to update selected state in graph UI
+
+// Editor instance for notes
+let notesEditorInstance = null;
 
 const selectors = {
   milestoneEditorArea: '#milestoneEditorArea',
@@ -30,20 +35,21 @@ const selectors = {
 
 /**
  * Initializes the Milestone Editor UI module.
- * @param {object} initialState - Object containing initial statuses.
+ * @param {object} initialState - Object containing initial statuses and username.
  * @param {function} onRenderMilestoneBubbles - Callback to re-render the milestone graph.
  * @param {function} onUpdateCurrentMilestone - Callback to update the selected milestone in graph UI.
  */
 export function initMilestoneEditorUI(initialState, onRenderMilestoneBubbles, onUpdateCurrentMilestone) {
   statuses = initialState.statuses;
+  currentUsername = initialState.username; // Initialize username
   renderMilestoneBubblesCallback = onRenderMilestoneBubbles;
   updateCurrentMilestoneCallback = onUpdateCurrentMilestone;
 }
 
 /**
- * Updates the internal statuses list.
+ * Updates the internal statuses list and username.
  * This function is called from the main UI module when global state changes.
- * @param {object} updatedState - Object with updated lists.
+ * @param {object} updatedState - Object with updated lists and/or username.
  */
 export function updateMilestoneEditorUIState(updatedState) {
   if (updatedState.statuses) {
@@ -56,16 +62,58 @@ export function updateMilestoneEditorUIState(updatedState) {
       }
     }
   }
+  if (updatedState.username !== undefined) {
+      currentUsername = updatedState.username;
+      // Re-evaluate button states if editor is open
+      const editorArea = document.querySelector(selectors.milestoneEditorArea);
+      if (editorArea && currentMilestone) {
+          updateButtonStates(editorArea);
+      }
+  }
+}
+
+/**
+ * Updates the enabled/disabled state of action buttons based on the current username and task creator.
+ * @param {HTMLElement} editorArea - The container for the milestone editor.
+ */
+function updateButtonStates(editorArea) {
+  const saveBtn = editorArea.querySelector(selectors.saveMilestoneBtn);
+  const deleteBtn = editorArea.querySelector(selectors.deleteMilestoneBtn);
+
+  // Buttons are enabled only if a username is set AND the task's creator matches
+  const canEditOrDelete = currentUsername && taskCreator === currentUsername;
+
+  if (saveBtn) {
+    saveBtn.disabled = !canEditOrDelete;
+  }
+  if (deleteBtn) {
+    deleteBtn.disabled = !canEditOrDelete;
+  }
+
+  // Set editability for rich text notes area
+  if (notesEditorInstance) {
+    notesEditorInstance.setEditable(canEditOrDelete);
+  }
+
+  // For other inputs (not text-area)
+  editorArea.querySelectorAll('input, select').forEach(input => {
+    input.disabled = !canEditOrDelete;
+  });
 }
 
 /**
  * Sends milestone data to the Python server.
  * @param {object} milestone - The milestone object to save.
  * @param {string} taskId - The ID of the parent task.
+ * @param {string} username - The username of the task creator.
  */
-async function saveMilestoneToServer(milestone, taskId) {
+async function saveMilestoneToServer(milestone, taskId, username) {
+    if (!username) {
+        showModalAlert('Error: Task creator username is not available. Cannot save milestone.');
+        return;
+    }
     try {
-        const response = await fetch(`http://localhost:12345/save-milestone/${taskId}/${milestone.id}`, {
+        const response = await fetch(`http://localhost:12345/save-milestone/${username}/${taskId}/${milestone.id}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
@@ -90,10 +138,15 @@ async function saveMilestoneToServer(milestone, taskId) {
  * Deletes milestone data from the Python server.
  * @param {string} milestoneId - The ID of the milestone to delete.
  * @param {string} taskId - The ID of the parent task.
+ * @param {string} username - The username of the task creator.
  */
-async function deleteMilestoneFromServer(milestoneId, taskId) {
+async function deleteMilestoneFromServer(milestoneId, taskId, username) {
+    if (!username) {
+        showModalAlert('Error: Task creator username is not available. Cannot delete milestone.');
+        return;
+    }
     try {
-        const response = await fetch(`http://localhost:12345/delete-milestone/${taskId}/${milestoneId}`, {
+        const response = await fetch(`http://localhost:12345/delete-milestone/${username}/${taskId}/${milestoneId}`, {
             method: 'DELETE'
         });
 
@@ -119,6 +172,16 @@ async function deleteMilestoneFromServer(milestoneId, taskId) {
 export async function openMilestoneEditor(milestone, taskId) {
   currentMilestone = milestone; // Set the currently selected milestone
   currentTaskId = taskId; // Store the task ID
+
+  // Fetch the parent task to get its creator
+  const parentTask = await DB.getTask(taskId);
+  if (!parentTask || !parentTask.creator) {
+      showModalAlert('Cannot open milestone editor: Parent task not found or has no creator. Please save the task first.');
+      closeMilestoneEditor(); // Close editor if we can't get task creator
+      return;
+  }
+  taskCreator = parentTask.creator; // Store the creator of the parent task
+
   if (updateCurrentMilestoneCallback) updateCurrentMilestoneCallback(milestone); // Inform graph UI
 
   const milestoneEditorArea = document.querySelector(selectors.milestoneEditorArea);
@@ -160,8 +223,8 @@ export async function openMilestoneEditor(milestone, taskId) {
                              .join('');
 
 
-  // Initialize Editor for notes
-  Editor.init(milestoneEditorArea.querySelector(selectors.milestoneNotesEditor));
+  // Initialize Editor for notes and store its instance
+  notesEditorInstance = Editor.init(milestoneEditorArea.querySelector(selectors.milestoneNotesEditor));
   milestoneEditorArea.querySelector(selectors.milestoneNotesEditor + ' .text-area').innerHTML = milestone.notes;
 
   // Add event listeners
@@ -177,6 +240,8 @@ export async function openMilestoneEditor(milestone, taskId) {
     // Scroll to the selected bubble if it's not fully in view
     selectedBubble.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
+
+  updateButtonStates(milestoneEditorArea); // Call to set initial button states
 }
 
 /**
@@ -201,6 +266,12 @@ function renderStatusSelectOptions(container, optionsArray, selectedValue) {
 async function saveMilestone() {
   if (!currentMilestone || !currentTaskId) return;
 
+  // Enforce username requirement and creator match
+  if (!currentUsername || taskCreator !== currentUsername) {
+      showModalAlert('You can only modify milestones for tasks you created. Please set your username in Settings or select a task you created.');
+      return;
+  }
+
   const milestoneEditorArea = document.querySelector(selectors.milestoneEditorArea);
   if (!milestoneEditorArea) return;
 
@@ -209,11 +280,11 @@ async function saveMilestone() {
   currentMilestone.finishDate = milestoneEditorArea.querySelector(selectors.milestoneFinishDateInput)?.value || null;
   currentMilestone.status = milestoneEditorArea.querySelector(selectors.milestoneStatusSelect)?.value || '';
   currentMilestone.parentId = milestoneEditorArea.querySelector(selectors.milestoneParentSelect)?.value || null; // Capture parentId
-  currentMilestone.notes = milestoneEditorArea.querySelector(selectors.milestoneNotesEditor + ' .text-area')?.innerHTML || '';
+  currentMilestone.notes = (notesEditorInstance) ? notesEditorInstance.getHTML() : '';
   currentMilestone.updatedAt = new Date().toISOString();
 
   await DB.putMilestone(currentMilestone); // Save to IndexedDB
-  await saveMilestoneToServer(currentMilestone, currentTaskId); // Save to Python server
+  await saveMilestoneToServer(currentMilestone, currentTaskId, taskCreator); // Pass creator for server path
   
   // Re-render bubbles in the current modal using the callback
   if (renderMilestoneBubblesCallback) {
@@ -236,6 +307,12 @@ async function deleteMilestone() {
     return;
   }
 
+  // Enforce username requirement and creator match
+  if (!currentUsername || taskCreator !== currentUsername) {
+      showModalAlert('You can only delete milestones for tasks you created. Please set your username in Settings or select a task you created.');
+      return;
+  }
+
   // Before deleting, check if this milestone is a parent to any other milestones
   const allMilestones = await DB.getMilestonesForTask(currentTaskId);
   const childrenMilestones = allMilestones.filter(m => m.parentId === currentMilestone.id);
@@ -249,7 +326,7 @@ async function deleteMilestone() {
 
   if (confirmed) {
     await DB.deleteMilestone(currentMilestone.id); // Delete from IndexedDB
-    await deleteMilestoneFromServer(currentMilestone.id, currentTaskId); // Delete from Python server
+    await deleteMilestoneFromServer(currentMilestone.id, currentTaskId, taskCreator); // Pass creator for server path
 
     currentMilestone = null; // Clear selected milestone
     if (updateCurrentMilestoneCallback) updateCurrentMilestoneCallback(null); // Inform graph UI no milestone is selected
@@ -281,6 +358,8 @@ async function deleteMilestone() {
  */
 function closeMilestoneEditor() {
   currentMilestone = null; // Clear selected milestone
+  currentTaskId = null; // Clear task ID
+  taskCreator = null; // Clear task creator
   if (updateCurrentMilestoneCallback) updateCurrentMilestoneCallback(null); // Inform graph UI no milestone is selected
 
   // Hide the editor area by adding the 'editor-hidden' class
@@ -302,4 +381,6 @@ function closeMilestoneEditor() {
   if (graphContainer) {
       graphContainer.querySelectorAll('.milestone-bubble').forEach(b => b.classList.remove('selected'));
   }
+  // Clear editor instance
+  notesEditorInstance = null;
 }

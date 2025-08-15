@@ -1,8 +1,28 @@
 // Simple rich-text editor built on contenteditable
 export const Editor = (function(){
-  // The 'init' function now accepts an 'onAttach' callback to handle file attachments.
-  // This allows the editor to send attachment data to the UI layer that manages the task data.
+  // Internal references to the editor elements, used by setEditable
+  let currentEditorInstance = null; // Stores the currently active .text-area
+  let currentToolbar = null; // Stores the toolbar for the current editor
+  let currentAttachInput = null; // Stores the attachment input for the current editor
+
+  /**
+   * Initializes a rich text editor on a given container element.
+   * The editor will create a contenteditable div inside the container.
+   * @param {HTMLElement} container - The DOM element to transform into an editor.
+   * @param {object} options - Optional configuration options.
+   * @param {function} options.onAttach - Callback function for handling attachments.
+   */
   function init(container, { onAttach } = {}){
+    if (!container) {
+      console.error('Editor container element not found for initialization.');
+      return {
+        getHTML: () => '',
+        setHTML: () => {},
+        focus: () => {},
+        setEditable: () => {} // Return a no-op setEditable for consistency
+      };
+    }
+
     container.innerHTML = `
       <div class="toolbar">
         <button data-cmd="bold"><b>B</b></button>
@@ -21,12 +41,19 @@ export const Editor = (function(){
     const ed = container.querySelector('.text-area');
     const attachInput = container.querySelector('[data-attach]');
 
+    // Store references to these elements for setEditable
+    currentEditorInstance = ed;
+    currentToolbar = toolbar;
+    currentAttachInput = attachInput;
+
     toolbar.addEventListener('click', (e)=>{
       const btn = e.target.closest('button');
-      if(!btn) return;
+      if(!btn || btn.disabled) return; // Prevent action if button is disabled
+
       const cmd = btn.dataset.cmd;
       if(cmd === 'createLink'){
-        const url = prompt('Enter URL'); if(url) document.execCommand('createLink',false,url);
+        const url = prompt('Enter URL');
+        if(url) document.execCommand('createLink',false,url);
       } else if(cmd === 'attach'){
         // The attach button now simply triggers the hidden file input.
         attachInput.click();
@@ -37,7 +64,8 @@ export const Editor = (function(){
 
     // This event listener triggers when a user selects a file.
     attachInput.addEventListener('change', async (e)=>{
-      const f = e.target.files[0]; if(!f) return;
+      const f = e.target.files[0];
+      if(!f) return;
       // The selected file is converted to a Base64 Data URL for storage.
       const dataUrl = await fileToDataURL(f);
       
@@ -68,9 +96,46 @@ export const Editor = (function(){
     return {
       getHTML: ()=>ed.innerHTML,
       setHTML: html => ed.innerHTML = html,
-      focus: ()=>ed.focus()
+      focus: ()=>ed.focus(),
+      setEditable: (editable) => {
+        // This closure ensures setEditable has access to 'ed', 'toolbar', 'attachInput'
+        setEditable(ed, toolbar, attachInput, editable);
+      }
     };
   }
+
+  /**
+   * Sets the editability of the rich text editor's content area and its toolbar.
+   * This is a private helper, called by the public setEditable method returned by init.
+   * @param {HTMLElement} editorTextArea - The contenteditable div (e.g., element with class 'text-area').
+   * @param {HTMLElement} toolbarEl - The toolbar element.
+   * @param {HTMLElement} attachInputEl - The hidden file input for attachments.
+   * @param {boolean} editable - True to make it editable, false to make it read-only.
+   */
+  function setEditable(editorTextArea, toolbarEl, attachInputEl, editable) {
+    if (editorTextArea) {
+      editorTextArea.contentEditable = editable;
+      // Add/remove a class for visual feedback (e.g., dimmer background for read-only)
+      if (editable) {
+        editorTextArea.classList.remove('read-only');
+      } else {
+        editorTextArea.classList.add('read-only');
+      }
+    }
+
+    // Disable/enable toolbar buttons
+    if (toolbarEl) {
+      toolbarEl.querySelectorAll('button').forEach(button => {
+        button.disabled = !editable;
+      });
+    }
+
+    // Disable/enable attachment input
+    if (attachInputEl) {
+      attachInputEl.disabled = !editable;
+    }
+  }
+
 
   /**
    * Renders static HTML content into a given element.
@@ -86,7 +151,8 @@ export const Editor = (function(){
     }
   }
 
-  // Return both init and renderStaticContent as part of the public API of Editor
+  // Return both init and renderStaticContent as part of the public API of Editor.
+  // The setEditable returned by init is a closure specific to that editor instance.
+  // We keep the main Editor object simpler here.
   return { init, renderStaticContent };
 })();
-
