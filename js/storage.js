@@ -51,8 +51,17 @@ export const DB = (function(){
     return new Promise((resolve,reject)=>{
       const tx = connection.transaction([STORE_TASKS],'readwrite');
       const store = tx.objectStore(STORE_TASKS);
-      store.put(task);
-      tx.oncomplete = ()=>resolve(task);
+
+      // Create a shallow copy of the task object to remove sensitive fields
+      // before storing in IndexedDB. These fields will be loaded from the server
+      // on demand.
+      const taskForIndexedDB = { ...task };
+      delete taskForIndexedDB.description;
+      delete taskForIndexedDB.notes;
+      delete taskForIndexedDB.attachments;
+
+      store.put(taskForIndexedDB); // Save modified task to IndexedDB
+      tx.oncomplete = ()=>resolve(task); // Resolve with original task object
       tx.onerror = e => reject(e.target.error);
     });
   }

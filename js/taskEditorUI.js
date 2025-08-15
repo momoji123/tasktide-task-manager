@@ -133,13 +133,57 @@ function updateButtonStates(editorContainer) {
   });
 }
 
+/**
+ * Loads a task's full details from the server.
+ * @param {string} taskId - The ID of the task to load.
+ * @param {string} username - The username (creator) of the task.
+ * @returns {Promise<object|null>} The full task object or null if not found/error.
+ */
+async function loadTaskFromServer(taskId, username) {
+    if (!username) {
+        showModalAlert('Error: Username is not set. Cannot load task from server.');
+        return null;
+    }
+    try {
+        const response = await fetch(`http://localhost:12345/load-task/${username}/${taskId}`);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`Server error: ${response.status} ${response.statusText} - ${errorData.error || response.url}`);
+        }
+        const taskData = await response.json();
+        console.log('Task loaded from server:', taskData);
+        return taskData;
+    } catch (error) {
+        console.error('Failed to load task from server:', error);
+        showModalAlert(`Error loading task from server: ${error.message}`);
+        return null;
+    }
+}
+
 
 /**
  * Opens the task editor for a given task.
  * @param {object} task - The task object to edit.
  */
-export function openTaskEditor(task) {
-  currentTask = task;
+export async function openTaskEditor(task, isNewTask = false) {
+  // If description, notes, or attachments are missing, fetch the full task from the server
+  if (!isNewTask && (!task.description || !task.notes || !task.attachments)) {
+      if (!task.creator) {
+          showModalAlert('Cannot load full task details: Task creator is not set. Please save the task first if it\'s new, or ensure your username is set if it\'s an existing task.');
+          return;
+      }
+      const fullTask = await loadTaskFromServer(task.id, task.creator);
+      if (fullTask) {
+          currentTask = fullTask; // Use the full task from the server
+      } else {
+          // If server load failed, perhaps show an error and return, or use the partial task
+          showModalAlert('Failed to load full task details from server. Displaying partial data.');
+          currentTask = task; // Fallback to partial task if server load fails
+      }
+  } else {
+      currentTask = task; // Use the provided task if it's already complete
+  }
+
   const editorArea = document.querySelector(selectors.editorArea);
   if (!editorArea) return;
 
@@ -171,19 +215,19 @@ export function openTaskEditor(task) {
   editorContainer.innerHTML = `
     <div class="card">
       <div class="label">Title</div>
-      <input id="taskTitle" value="${escapeHtml(task.title)}">
+      <input id="taskTitle" value="${escapeHtml(currentTask.title)}">
       <div class="label">From</div>
       <select id="taskFrom"></select>
       <div class="label">Priority (1-high,5-low)</div>
-      <input id="taskPriority" type="number" min="1" max="5" value="${task.priority}">
+      <input id="taskPriority" type="number" min="1" max="5" value="${currentTask.priority}">
       <div class="date-inputs">
         <div>
           <div class="label">Deadline</div>
-          <input id="taskDeadline" type="date" value="${task.deadline ? task.deadline.split('T')[0]:''}">
+          <input id="taskDeadline" type="date" value="${currentTask.deadline ? currentTask.deadline.split('T')[0]:''}">
         </div>
         <div>
           <div class="label">Finish Date</div>
-          <input id="taskFinishDate" type="date" value="${task.finishDate ? task.finishDate.split('T')[0]:''}">
+          <input id="taskFinishDate" type="date" value="${currentTask.finishDate ? currentTask.finishDate.split('T')[0]:''}">
         </div>
       </div>
       <div class="label">Status</div>
@@ -229,10 +273,10 @@ export function openTaskEditor(task) {
 
   // Initialize rich text editors and store their instances
   descEditorInstance = Editor.init(editorContainer.querySelector(selectors.descEditor), { onAttach: handleAttachment });
-  editorContainer.querySelector(selectors.descEditor + ' .text-area').innerHTML = task.description;
+  editorContainer.querySelector(selectors.descEditor + ' .text-area').innerHTML = currentTask.description || '';
 
   notesEditorInstance = Editor.init(editorContainer.querySelector(selectors.notesEditor), { onAttach: handleAttachment });
-  editorContainer.querySelector(selectors.notesEditor + ' .text-area').innerHTML = task.notes;
+  editorContainer.querySelector(selectors.notesEditor + ' .text-area').innerHTML = currentTask.notes || '';
 
   // Add event listeners for task actions
   editorContainer.querySelector(selectors.saveTaskBtn)?.addEventListener('click', saveTask);
@@ -383,14 +427,14 @@ async function saveTask() {
       return;
   }
 
-  await DB.putTask(currentTask); // Save to IndexedDB
-  await saveTaskToServer(currentTask, currentTask.creator); // Pass creator for server path
+  await DB.putTask(currentTask); // Save to IndexedDB (this will now only save partial task)
+  await saveTaskToServer(currentTask, currentTask.creator); // Pass creator for server path (sends full task)
 
 
   if (renderTaskListCallback) await renderTaskListCallback(); // Re-render task list
   // After saving, go back to view mode
   if (openTaskViewerCallback) {
-      openTaskViewerCallback(currentTask);
+      openTaskViewerCallback(currentTask); // Pass the updated task to the viewer
   } else {
       // Fallback if viewer callback isn't set (shouldn't happen with proper init)
       openTaskEditor(currentTask); // Re-open editor to show updated state (e.g. updated date)

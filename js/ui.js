@@ -92,40 +92,6 @@ export const UI = (function() {
     // MilestoneEditorUI needs: initial state, and callbacks to re-render milestone bubbles, and update current milestone in graph
     MilestoneEditorUI.initMilestoneEditorUI(commonState, MilestoneGraphUI.renderMilestoneBubbles, MilestoneGraphUI.updateCurrentMilestone);
 
-    // 4. Set up listeners for global state changes originating from child components
-    // This is where `ui.js` acts as an intermediary or central state manager
-    // For simplicity in this refactor, some direct updates to DB are done within modules,
-    // and then callbacks are used to re-render. For more complex apps, a proper
-    // central state management pattern (like Redux or simple event bus) would be ideal.
-
-    // For now, the existing direct updates and callbacks suffice for the current flow.
-
-    // Handle new task button: it should open the editor directly for new tasks
-    document.getElementById('newTaskBtn')?.addEventListener('click', () => {
-        // Enforce username check before creating a new task
-        if (!username) {
-            showModalAlert('Please set your username in Settings before creating tasks or milestones.');
-            return;
-        }
-
-        TaskEditorUI.openTaskEditor({
-            id: 't_' + Date.now(),
-            title: '',
-            description: '',
-            notes: '',
-            status: statuses[0] || 'todo',
-            priority: 3,
-            from: froms[0] || 'Personal',
-            deadline: null,
-            finishDate: null,
-            categories: [],
-            attachments: [],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            creator: null // Initialize creator as null; it will be set on first save if empty
-        });
-    });
-
   }
 
   // Expose init function

@@ -291,7 +291,8 @@ async function manageList(type, title, renderFilterCategoriesMultiSelectCallback
         if (updateTaskEditorUICallback) updateTaskEditorUICallback({ froms: finalUpdateList });
       }
       await DB.putMeta(putMetaKey, finalUpdateList);
-      if (renderTaskListCallback) await renderTaskListCallback(); // Re-render task list to reflect changes
+      // Removed the renderTaskListCallback() call here as it's handled by updateLeftMenuTaskUIState
+      // if (renderTaskListCallback) await renderTaskListCallback(); // Re-render task list to reflect changes
     }
   });
 }

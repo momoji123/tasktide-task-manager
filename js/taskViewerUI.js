@@ -39,11 +39,52 @@ export function initTaskViewerUI(onOpenTaskEditor, onOpenMilestonesView) {
 }
 
 /**
+ * Loads a task's full details from the server.
+ * This is a duplicate of the function in taskEditorUI.js to avoid circular dependencies
+ * or complex shared state management. In a larger app, this would be in a shared service.
+ * @param {string} taskId - The ID of the task to load.
+ * @param {string} username - The username (creator) of the task.
+ * @returns {Promise<object|null>} The full task object or null if not found/error.
+ */
+async function loadTaskFromServer(taskId, username) {
+  if (!username) {
+      console.error('Error: Username is not set. Cannot load task from server.');
+      return null;
+  }
+  try {
+      const response = await fetch(`http://localhost:12345/load-task/${username}/${taskId}`);
+      if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(`Server error: ${response.status} ${response.statusText} - ${errorData.error || response.url}`);
+      }
+      const taskData = await response.json();
+      console.log('Task loaded from server:', taskData);
+      return taskData;
+  } catch (error) {
+      console.error('Failed to load task from server:', error);
+      // Removed showModalAlert to avoid duplicate alerts if taskEditorUI also tries to load
+      return null;
+  }
+}
+
+/**
  * Opens the task viewer for a given task.
  * @param {object} task - The task object to view.
  */
-export function openTaskViewer(task) {
-  currentTask = task;
+export async function openTaskViewer(task, isNewTask = false) {
+  // If description, notes, or attachments are missing, fetch the full task from the server
+  if (!isNewTask && (!task.description || !task.notes || !task.attachments)) {
+      const fullTask = await loadTaskFromServer(task.id, task.creator);
+      if (fullTask) {
+          currentTask = fullTask; // Use the full task from the server
+      } else {
+          console.warn('Failed to load full task details from server for viewer. Displaying partial data.');
+          currentTask = task; // Fallback to partial task if server load fails
+      }
+  } else {
+      currentTask = task; // Use the provided task if it's already complete
+  }
+
   const viewerArea = document.querySelector(selectors.viewerArea);
   if (!viewerArea) return;
 
@@ -54,21 +95,21 @@ export function openTaskViewer(task) {
   viewerArea.appendChild(clone);
 
   // Populate fields
-  viewerArea.querySelector(selectors.viewTaskTitle).textContent = task.title || 'No Title';
-  viewerArea.querySelector(selectors.viewTaskFrom).textContent = task.from || 'N/A';
-  viewerArea.querySelector(selectors.viewTaskPriority).textContent = task.priority || 'N/A';
-  viewerArea.querySelector(selectors.viewTaskDeadline).textContent = task.deadline ? new Date(task.deadline).toLocaleDateString() : 'No Deadline';
-  viewerArea.querySelector(selectors.viewTaskFinishDate).textContent = task.finishDate ? new Date(task.finishDate).toLocaleDateString() : 'Not Finished';
-  viewerArea.querySelector(selectors.viewTaskStatus).textContent = task.status || 'N/A';
+  viewerArea.querySelector(selectors.viewTaskTitle).textContent = currentTask.title || 'No Title';
+  viewerArea.querySelector(selectors.viewTaskFrom).textContent = currentTask.from || 'N/A';
+  viewerArea.querySelector(selectors.viewTaskPriority).textContent = currentTask.priority || 'N/A';
+  viewerArea.querySelector(selectors.viewTaskDeadline).textContent = currentTask.deadline ? new Date(currentTask.deadline).toLocaleDateString() : 'No Deadline';
+  viewerArea.querySelector(selectors.viewTaskFinishDate).textContent = currentTask.finishDate ? new Date(currentTask.finishDate).toLocaleDateString() : 'Not Finished';
+  viewerArea.querySelector(selectors.viewTaskStatus).textContent = currentTask.status || 'N/A';
 
   // Render rich text content
   const descContent = viewerArea.querySelector(selectors.viewDescContent);
   if (descContent) {
-    Editor.renderStaticContent(descContent, task.description || 'No description.');
+    Editor.renderStaticContent(descContent, currentTask.description || 'No description.');
   }
   const notesContent = viewerArea.querySelector(selectors.viewNotesContent);
   if (notesContent) {
-    Editor.renderStaticContent(notesContent, task.notes || 'No notes.');
+    Editor.renderStaticContent(notesContent, currentTask.notes || 'No notes.');
   }
 
   renderCategoryTags();
@@ -77,7 +118,7 @@ export function openTaskViewer(task) {
   // Attach event listeners to the buttons after they are appended to the DOM
   viewerArea.querySelector(selectors.editTaskBtn)?.addEventListener('click', () => {
     if (currentTask && openTaskEditorCallback) {
-      openTaskEditorCallback(currentTask);
+      openTaskEditorCallback(currentTask, isNewTask);
     }
   });
 

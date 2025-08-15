@@ -13,6 +13,7 @@ let selectedFilterCategories = [];
 let selectedFilterStatuses = []; // New state for multi-select status filter
 let openTaskEditorCallback = null; // Callback to open the task editor
 let currentSelectedTaskId = null; // New state to hold the ID of the currently selected task
+let currentUsername = null; // To get the current user's username for loading tasks
 
 const selectors = {
   newTaskBtn: '#newTaskBtn',
@@ -46,25 +47,34 @@ const selectors = {
 
 /**
  * Initializes left menu task UI event listeners and state.
- * @param {object} initialState - Object containing initial categories, statuses, filter states.
- * @param {function} onOpenTaskEditor - Callback function to open the task editor.
+ * @param {object} initialState - Object containing initial categories, statuses, filter states, and username.
+ * @param {function} onOpenTaskEditor - Callback function to open the task editor/viewer.
  */
 export async function initLeftMenuTaskUI(initialState, onOpenTaskEditor) {
   categories = initialState.categories;
   statuses = initialState.statuses;
   filterSectionVisible = initialState.filterSectionVisible;
   selectedFilterCategories = initialState.selectedFilterCategories;
-  // Initialize selectedFilterStatuses from storage or default to empty array
   selectedFilterStatuses = initialState.selectedFilterStatuses || []; 
-  
+  currentUsername = initialState.username; // Initialize username
+
   // Wrap the original onOpenTaskEditor to also track the selected task ID
-  openTaskEditorCallback = async (task) => {
+  // and fetch full task data from server before opening editor/viewer
+  openTaskEditorCallback = async (task, isNewTask = false) => { // Added isNewTask parameter
     currentSelectedTaskId = task ? task.id : null; // Set current selected task ID
-    // No need to call renderTaskList here as it will be called by updateLeftMenuTaskUIState
-    // and also the click handler on task items which also triggers renderTaskList.
-    if (onOpenTaskEditor) {
-      onOpenTaskEditor(task);
+    
+    console.log(isNewTask)
+    let fullTask = task;
+    // Only attempt to load if it's NOT a brand new task AND it has a creator AND it's a partial task
+    if (!isNewTask && task.creator && (!task.description || !task.notes || !task.attachments)) {
+        fullTask = await loadTaskFromServer(task.id, task.creator) || task; // Fallback to partial if load fails
     }
+
+    if (onOpenTaskEditor) {
+      onOpenTaskEditor(fullTask, isNewTask); // Pass the potentially full task to the viewer/editor
+    }
+    // Re-added: renderTaskList() here to update selection highlight
+    renderTaskList(); 
   };
 
   // Apply initial filter section visibility state
@@ -77,15 +87,14 @@ export async function initLeftMenuTaskUI(initialState, onOpenTaskEditor) {
   document.querySelector(selectors.newTaskBtn)?.addEventListener('click', () => {
     // Clear current selected task when creating a new one
     currentSelectedTaskId = null;
-    renderTaskList(); // Re-render to clear any existing selection highlight
 
     const id = 't_' + Date.now();
     const emptyTask = {
       id,
       title: 'Untitled',
-      description: '',
-      notes: '',
-      attachments: [],
+      description: '', // These will be filled by the editor and saved to server
+      notes: '',       // but not saved to IndexedDB
+      attachments: [], //
       priority: 3,
       deadline: null,
       finishDate: null,
@@ -93,9 +102,11 @@ export async function initLeftMenuTaskUI(initialState, onOpenTaskEditor) {
       categories: [initialState.categories[0] || 'General'],
       status: initialState.statuses[0] || 'todo',
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      creator: currentUsername
     };
-    if (openTaskEditorCallback) openTaskEditorCallback(emptyTask);
+    // Pass true for isNewTask
+    if (openTaskEditorCallback) openTaskEditorCallback(emptyTask, true);
   });
 
   // Event listeners for filters and sorting
@@ -138,7 +149,7 @@ export async function initLeftMenuTaskUI(initialState, onOpenTaskEditor) {
     if (filterCategoryDropdownContent && !event.target.closest(selectors.filterCategoryMultiSelect) && filterCategoryDropdownContent.classList.contains('show')) {
       filterCategoryDropdownContent.classList.remove('show');
     }
-    if (filterStatusDropdownContent && !event.target.closest(selectors.filterStatusMultiSelect) && filterStatusDropdownContent.classList.contains('show')) {
+    if (filterStatusDropdownContent && !event.target.closest(selectors.filterFilterStatusMultiSelect) && filterStatusDropdownContent.classList.contains('show')) {
       filterStatusDropdownContent.classList.remove('show');
     }
   });
@@ -172,6 +183,8 @@ export function updateLeftMenuTaskUIState(updatedState) {
   if (updatedState.filterSectionVisible !== undefined) filterSectionVisible = updatedState.filterSectionVisible;
   if (updatedState.selectedFilterCategories) selectedFilterCategories = updatedState.selectedFilterCategories;
   if (updatedState.selectedFilterStatuses) selectedFilterStatuses = updatedState.selectedFilterStatuses;
+  if (updatedState.username !== undefined) currentUsername = updatedState.username; // Update username
+
   // Also update currentSelectedTaskId if it's part of the updatedState, though it usually comes from openTaskEditorCallback
   if (updatedState.currentSelectedTaskId !== undefined) currentSelectedTaskId = updatedState.currentSelectedTaskId;
   
@@ -185,15 +198,46 @@ export function updateLeftMenuTaskUIState(updatedState) {
   renderTaskList(); // Re-render task list after state changes
 }
 
+/**
+ * Loads a task's full details from the server.
+ * This is a duplicate of the function in taskEditorUI.js to avoid circular dependencies
+ * or complex shared state management. In a larger app, this would be in a shared service.
+ * @param {string} taskId - The ID of the task to load.
+ * @param {string} username - The username (creator) of the task.
+ * @returns {Promise<object|null>} The full task object or null if not found/error.
+ */
+async function loadTaskFromServer(taskId, username) {
+    if (!username) {
+        // showModalAlert('Error: Username is not set. Cannot load task from server.'); // Avoid duplicate alerts
+        return null;
+    }
+    try {
+        const response = await fetch(`http://localhost:12345/load-task/${username}/${taskId}`);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`Server error: ${response.status} ${response.statusText} - ${errorData.error || response.url}`);
+        }
+        const taskData = await response.json();
+        console.log('Task loaded from server:', taskData);
+        return taskData;
+    } catch (error) {
+        console.error('Failed to load task from server:', error);
+        // showModalAlert(`Error loading task from server: ${error.message}`); // Avoid duplicate alerts
+        return null;
+    }
+}
+
 
 /**
  * Renders the list of tasks based on current filters and sorting/grouping.
  */
 export async function renderTaskList() {
   const container = document.querySelector(selectors.taskList);
+  
+  
   if (!container) return; // Ensure container exists
   container.innerHTML = ''; // Clear existing tasks to prevent duplication
-  const tasks = await DB.getAllTasks();
+  const tasks = await DB.getAllTasks(); // These tasks are now partial (no description, notes, attachments)
   const q = document.querySelector(selectors.searchInput)?.value.toLowerCase() || '';
   // Removed old filterStat variable as it's replaced by selectedFilterStatuses
 
@@ -212,7 +256,10 @@ export async function renderTaskList() {
 
   let filtered = tasks.filter(t => {
     // Search filter
-    if (q && !(t.title?.toLowerCase().includes(q) || t.from?.toLowerCase().includes(q) || t.notes?.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q))) return false;
+    // Note: Search will now only happen on title and 'from' field from IndexedDB.
+    // Full text search on description/notes would require fetching all tasks,
+    // which defeats the purpose of not storing them locally, or a server-side search API.
+    if (q && !(t.title?.toLowerCase().includes(q) || t.from?.toLowerCase().includes(q))) return false;
     
     // Category filter (multi-select)
     // If selectedFilterCategories is empty, it means "select all" (no filter applied)
@@ -437,9 +484,6 @@ function renderTaskItems(container, tasksToRender) {
   const tmpl = document.getElementById('task-item-template')?.content;
   if (!tmpl) return; // Ensure template exists
 
-  // The container.innerHTML = ''; is handled by renderTaskList()
-  // No need to clear here again as this function is called by renderTaskList()
-
   tasksToRender.forEach(t => {
     const node = tmpl.cloneNode(true);
     const el = node.querySelector('.task-item');
@@ -474,9 +518,10 @@ function renderTaskItems(container, tasksToRender) {
       // Update the currentSelectedTaskId and re-render the task list
       // This will ensure the previous selection is un-styled and the new one is styled.
       currentSelectedTaskId = t.id;
-      renderTaskList(); 
-      if (openTaskEditorCallback) openTaskEditorCallback(t);
+      // Fetch the full task from the server before opening the editor/viewer
+      if (openTaskEditorCallback) openTaskEditorCallback(t); // Pass the partial task, callback will handle full load
     });
+    console.log(container)
     container.appendChild(node);
   });
 }
