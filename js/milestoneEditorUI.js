@@ -59,6 +59,59 @@ export function updateMilestoneEditorUIState(updatedState) {
 }
 
 /**
+ * Sends milestone data to the Python server.
+ * @param {object} milestone - The milestone object to save.
+ * @param {string} taskId - The ID of the parent task.
+ */
+async function saveMilestoneToServer(milestone, taskId) {
+    try {
+        const response = await fetch(`http://localhost:12345/save-milestone/${taskId}/${milestone.id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(milestone)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`Server error: ${response.status} ${response.statusText} - ${errorData.error || response.url}`);
+        }
+
+        const result = await response.json();
+        console.log('Milestone saved to server:', result);
+    } catch (error) {
+        console.error('Failed to save milestone to server:', error);
+        showModalAlert(`Error saving milestone to server: ${error.message}`);
+    }
+}
+
+/**
+ * Deletes milestone data from the Python server.
+ * @param {string} milestoneId - The ID of the milestone to delete.
+ * @param {string} taskId - The ID of the parent task.
+ */
+async function deleteMilestoneFromServer(milestoneId, taskId) {
+    try {
+        const response = await fetch(`http://localhost:12345/delete-milestone/${taskId}/${milestoneId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`Server error: ${response.status} ${response.statusText} - ${errorData.error || response.url}`);
+        }
+
+        const result = await response.json();
+        console.log('Milestone deleted from server:', result);
+    } catch (error) {
+        console.error('Failed to delete milestone from server:', error);
+        showModalAlert(`Error deleting milestone from server: ${error.message}`);
+    }
+}
+
+
+/**
  * Opens the milestone editor for a given milestone.
  * @param {object} milestone - The milestone object to edit.
  * @param {string} taskId - The ID of the parent task.
@@ -97,7 +150,8 @@ export async function openMilestoneEditor(milestone, taskId) {
   renderStatusSelectOptions(milestoneEditorArea, statuses, milestone.status);
 
   // Populate parent milestone dropdown
-  const allMilestones = await DB.getMilestonesForTask(taskId);
+  // Fetch milestones directly from the server for this task
+  const allMilestones = await DB.getMilestonesForTask(taskId); 
   const parentSelect = milestoneEditorArea.querySelector(selectors.milestoneParentSelect);
   parentSelect.innerHTML = '<option value="">-- No Parent Milestone --</option>' + 
                            allMilestones
@@ -142,7 +196,7 @@ function renderStatusSelectOptions(container, optionsArray, selectedValue) {
 
 
 /**
- * Saves the current milestone to IndexedDB.
+ * Saves the current milestone to IndexedDB and to the server.
  */
 async function saveMilestone() {
   if (!currentMilestone || !currentTaskId) return;
@@ -158,7 +212,8 @@ async function saveMilestone() {
   currentMilestone.notes = milestoneEditorArea.querySelector(selectors.milestoneNotesEditor + ' .text-area')?.innerHTML || '';
   currentMilestone.updatedAt = new Date().toISOString();
 
-  await DB.putMilestone(currentMilestone);
+  await DB.putMilestone(currentMilestone); // Save to IndexedDB
+  await saveMilestoneToServer(currentMilestone, currentTaskId); // Save to Python server
   
   // Re-render bubbles in the current modal using the callback
   if (renderMilestoneBubblesCallback) {
@@ -174,7 +229,7 @@ async function saveMilestone() {
 }
 
 /**
- * Deletes the current milestone from IndexedDB.
+ * Deletes the current milestone from IndexedDB and from the server.
  */
 async function deleteMilestone() {
   if (!currentMilestone || !currentTaskId) {
@@ -193,7 +248,9 @@ async function deleteMilestone() {
   const confirmed = await showModalAlertConfirm(`Are you sure you want to delete milestone "${escapeHtml(currentMilestone.title)}"?`);
 
   if (confirmed) {
-    await DB.deleteMilestone(currentMilestone.id);
+    await DB.deleteMilestone(currentMilestone.id); // Delete from IndexedDB
+    await deleteMilestoneFromServer(currentMilestone.id, currentTaskId); // Delete from Python server
+
     currentMilestone = null; // Clear selected milestone
     if (updateCurrentMilestoneCallback) updateCurrentMilestoneCallback(null); // Inform graph UI no milestone is selected
     
@@ -212,7 +269,10 @@ async function deleteMilestone() {
       }
     }
     showModalAlert('Milestone deleted!');
-    milestonesPage.querySelector('.milestones-view-body-grid').classList.add('editor-hidden');
+    const milestonesPage = document.querySelector(selectors.milestonesPage);
+    if (milestonesPage) {
+        milestonesPage.querySelector('.milestones-view-body-grid').classList.add('editor-hidden');
+    }
   }
 }
 

@@ -2,23 +2,21 @@ import http.server
 import socketserver
 import os
 import json
+import shutil # Import shutil for directory removal
 from urllib.parse import urlparse
 
 # Define the port number the server will listen on.
 PORT = 12345
 
-# Define the directory to store the JSON data files.
-# This directory will be created if it doesn't exist.
+# Define the base directory to store the JSON data files.
 DATA_DIR = "data"
 
-# Ensure the data directory exists
+# Ensure the base data directory exists
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
-    print(f"Created data directory: {DATA_DIR}")
+    print(f"Created base data directory: {DATA_DIR}")
 
-# Custom Request Handler to manage PUT and GET requests for task data
-# and also serve static files.
-# We inherit from SimpleHTTPRequestHandler to get static file serving capabilities.
+# Custom Request Handler to manage PUT, GET, and DELETE requests
 class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
 
     # Helper function to send an HTTP response
@@ -31,89 +29,156 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
         else: # Assuming bytes or JSON
             self.wfile.write(body)
 
-    # Handles PUT requests for saving task data
+    # Handles PUT requests for saving task or milestone data
     def do_PUT(self):
         parsed_path = urlparse(self.path)
         path_segments = parsed_path.path.strip('/').split('/')
 
-        # Check if the request path matches the expected format: /save-task/<task-id>
+        # Save Task: /save-task/<task-id>
         if len(path_segments) == 2 and path_segments[0] == "save-task":
             task_id = path_segments[1]
+            task_data_dir = os.path.join(DATA_DIR, task_id)
+            if not os.path.exists(task_data_dir):
+                os.makedirs(task_data_dir)
+
+            file_path = os.path.join(task_data_dir, f"{task_id}.json")
+            
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
 
             try:
-                # Attempt to decode the received data as JSON
                 task_data = json.loads(post_data.decode('utf-8'))
-                file_path = os.path.join(DATA_DIR, f"{task_id}.json")
-
-                # Save the JSON data to a file
                 with open(file_path, 'w', encoding='utf-8') as f:
                     json.dump(task_data, f, indent=4)
-
-                print(f"Saved task '{task_id}' to {file_path}")
                 self._send_response(200, "application/json", json.dumps({"message": f"Task '{task_id}' saved successfully."}))
-
             except json.JSONDecodeError:
-                # Handle cases where the received data is not valid JSON
-                print(f"Error: Invalid JSON received for task '{task_id}'")
                 self._send_response(400, "application/json", json.dumps({"error": "Invalid JSON format."}))
             except Exception as e:
-                # Handle other potential errors during file writing
-                print(f"Error saving task '{task_id}': {e}")
+                self._send_response(500, "application/json", json.dumps({"error": f"Server error: {e}"}))
+        
+        # Save Milestone: /save-milestone/<task-id>/<milestone-id>
+        elif len(path_segments) == 3 and path_segments[0] == "save-milestone":
+            task_id = path_segments[1]
+            milestone_id = path_segments[2]
+            
+            task_milestone_dir = os.path.join(DATA_DIR, task_id)
+            if not os.path.exists(task_milestone_dir):
+                os.makedirs(task_milestone_dir)
+
+            file_path = os.path.join(task_milestone_dir, f"{milestone_id}.json")
+
+            content_length = int(self.headers['Content-Length'])
+            post_data = self.rfile.read(content_length)
+
+            try:
+                milestone_data = json.loads(post_data.decode('utf-8'))
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(milestone_data, f, indent=4)
+                self._send_response(200, "application/json", json.dumps({"message": f"Milestone '{milestone_id}' saved successfully."}))
+            except json.JSONDecodeError:
+                self._send_response(400, "application/json", json.dumps({"error": "Invalid JSON format."}))
+            except Exception as e:
                 self._send_response(500, "application/json", json.dumps({"error": f"Server error: {e}"}))
         else:
-            # Respond with 404 Not Found if the path does not match
-            self._send_response(404, "application/json", json.dumps({"error": "Endpoint not found. Use /save-task/<task-id>"}))
+            self._send_response(404, "application/json", json.dumps({"error": "Endpoint not found."}))
 
     # Handles GET requests for loading task data or serving static files
     def do_GET(self):
         parsed_path = urlparse(self.path)
         path_segments = parsed_path.path.strip('/').split('/')
 
-        # Check if the request path matches the expected format: /load-task/<task-id>
+        # Load Task: /load-task/<task-id>
         if len(path_segments) == 2 and path_segments[0] == "load-task":
             task_id = path_segments[1]
-            file_path = os.path.join(DATA_DIR, f"{task_id}.json")
+            task_file_path = os.path.join(DATA_DIR, task_id, f"{task_id}.json")
 
-            if os.path.exists(file_path):
+            if os.path.exists(task_file_path):
                 try:
-                    # Load the JSON data from the file
-                    with open(file_path, 'r', encoding='utf-8') as f:
+                    with open(task_file_path, 'r', encoding='utf-8') as f:
                         task_data = json.load(f)
-                    print(f"Loaded task '{task_id}' from {file_path}")
-                    # Send the loaded JSON data back to the client
                     self._send_response(200, "application/json", json.dumps(task_data, indent=4).encode('utf-8'))
                 except json.JSONDecodeError:
-                    # Handle cases where the file content is not valid JSON
-                    print(f"Error: File '{file_path}' contains invalid JSON.")
                     self._send_response(500, "application/json", json.dumps({"error": "Stored file is corrupted (invalid JSON)."}).encode('utf-8'))
                 except Exception as e:
-                    # Handle other potential errors during file reading
-                    print(f"Error loading task '{task_id}': {e}")
                     self._send_response(500, "application/json", json.dumps({"error": f"Server error: {e}"}).encode('utf-8'))
             else:
-                # Respond with 404 Not Found if the file does not exist
-                print(f"Task '{task_id}' not found at {file_path}")
                 self._send_response(404, "application/json", json.dumps({"error": f"Task '{task_id}' not found."}).encode('utf-8'))
+        
+        # Load Milestones: /load-milestones/<task-id>
+        elif len(path_segments) == 2 and path_segments[0] == "load-milestones":
+            task_id = path_segments[1]
+            task_milestone_dir = os.path.join(DATA_DIR, task_id)
+            milestones = []
+
+            if os.path.exists(task_milestone_dir) and os.path.isdir(task_milestone_dir):
+                for filename in os.listdir(task_milestone_dir):
+                    if filename.endswith(".json") and filename != f"{task_id}.json":
+                        milestone_file_path = os.path.join(task_milestone_dir, filename)
+                        try:
+                            with open(milestone_file_path, 'r', encoding='utf-8') as f:
+                                milestone_data = json.load(f)
+                                milestones.append(milestone_data)
+                        except json.JSONDecodeError:
+                            print(f"Error: File '{milestone_file_path}' contains invalid JSON. Skipping.")
+                        except Exception as e:
+                            print(f"Error loading milestone from '{milestone_file_path}': {e}. Skipping.")
+                self._send_response(200, "application/json", json.dumps(milestones, indent=4).encode('utf-8'))
+            else:
+                self._send_response(200, "application/json", json.dumps([]).encode('utf-8')) # Return empty array if no milestones
+
         else:
-            # If the path is not for /load-task, let the base class (SimpleHTTPRequestHandler)
-            # handle it, which will serve static files from the current directory.
             super().do_GET()
+
+    # Handles DELETE requests for deleting task folders or individual milestone files
+    def do_DELETE(self):
+        parsed_path = urlparse(self.path)
+        path_segments = parsed_path.path.strip('/').split('/')
+
+        # Delete Task: /delete-task/<task-id> (deletes the entire task folder)
+        if len(path_segments) == 2 and path_segments[0] == "delete-task":
+            task_id = path_segments[1]
+            task_dir_path = os.path.join(DATA_DIR, task_id)
+
+            if os.path.exists(task_dir_path) and os.path.isdir(task_dir_path):
+                try:
+                    shutil.rmtree(task_dir_path)
+                    self._send_response(200, "application/json", json.dumps({"message": f"Task folder '{task_id}' deleted successfully."}))
+                except Exception as e:
+                    self._send_response(500, "application/json", json.dumps({"error": f"Server error deleting task folder: {e}"}))
+            else:
+                self._send_response(404, "application/json", json.dumps({"error": f"Task folder '{task_id}' not found."}))
+        
+        # Delete Milestone: /delete-milestone/<task-id>/<milestone-id>
+        elif len(path_segments) == 3 and path_segments[0] == "delete-milestone":
+            task_id = path_segments[1]
+            milestone_id = path_segments[2]
+            milestone_file_path = os.path.join(DATA_DIR, task_id, f"{milestone_id}.json")
+
+            if os.path.exists(milestone_file_path):
+                try:
+                    os.remove(milestone_file_path)
+                    self._send_response(200, "application/json", json.dumps({"message": f"Milestone '{milestone_id}' deleted successfully."}))
+                except Exception as e:
+                    self._send_response(500, "application/json", json.dumps({"error": f"Server error deleting milestone: {e}"}))
+            else:
+                self._send_response(404, "application/json", json.dumps({"error": f"Milestone '{milestone_id}' not found."}))
+        else:
+            self._send_response(404, "application/json", json.dumps({"error": "Endpoint not found."}))
 
 
 # Create the server using ThreadingTCPServer for concurrent requests.
 with socketserver.ThreadingTCPServer(("", PORT), SimpleTaskServerHandler) as httpd:
-    # Set the current working directory to "." so SimpleHTTPRequestHandler serves from here.
-    # This also means your index.html should be in the same directory as the script,
-    # or you can change os.chdir() to a specific web directory.
     os.chdir(".") # Ensure the server looks for files in the current directory.
 
     print(f"Serving HTTP on port {PORT}")
     print(f"Access static files at: http://localhost:{PORT}/")
     print(f"Data will be stored in: {os.path.abspath(DATA_DIR)}")
     print(f"To save a task: PUT request to http://localhost:{PORT}/save-task/<task-id> with JSON body")
+    print(f"To save a milestone: PUT request to http://localhost:{PORT}/save-milestone/<task-id>/<milestone-id> with JSON body")
     print(f"To load a task: GET request to http://localhost:{PORT}/load-task/<task-id>")
+    print(f"To load milestones: GET request to http://localhost:{PORT}/load-milestones/<task-id>")
+    print(f"To delete a task (and its folder): DELETE request to http://localhost:{PORT}/delete-task/<task-id>")
+    print(f"To delete a milestone: DELETE request to http://localhost:{PORT}/delete-milestone/<task-id>/<milestone-id>")
 
     try:
         httpd.serve_forever()

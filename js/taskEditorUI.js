@@ -248,6 +248,30 @@ async function saveTaskToServer(task) {
 }
 
 /**
+ * Deletes a task and its associated folder from the Python server.
+ * @param {string} taskId - The ID of the task to delete.
+ */
+async function deleteTaskFromServer(taskId) {
+    try {
+        const response = await fetch(`http://localhost:12345/delete-task/${taskId}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`Server error: ${response.status} ${response.statusText} - ${errorData.error || response.url}`);
+        }
+
+        const result = await response.json();
+        console.log('Task and its folder deleted from server:', result);
+    } catch (error) {
+        console.error('Failed to delete task and its folder from server:', error);
+        showModalAlert(`Error deleting task and its folder from server: ${error.message}`);
+    }
+}
+
+
+/**
  * Saves the current task to IndexedDB and to the server.
  */
 async function saveTask() {
@@ -266,8 +290,7 @@ async function saveTask() {
   currentTask.updatedAt = new Date().toISOString();
 
   let newObj = await DB.putTask(currentTask); // Save to IndexedDB
-  // NEW: Save to Python server
-  await saveTaskToServer(currentTask);
+  await saveTaskToServer(currentTask); // Save to Python server
 
 
   if (renderTaskListCallback) await renderTaskListCallback(); // Re-render task list
@@ -282,15 +305,16 @@ async function saveTask() {
 }
 
 /**
- * Deletes the current task from IndexedDB.
+ * Deletes the current task from IndexedDB and server.
  */
 async function deleteTask() {
   if (!currentTask) return;
   const confirmed = await showModalAlertConfirm(`Are you sure you want to delete task "${escapeHtml(currentTask.title)}"? This will also delete all associated milestones.`);
 
   if (confirmed) {
-    // DB.deleteTask also handles deleting associated milestones
-    await DB.deleteTask(currentTask.id);
+    await DB.deleteTask(currentTask.id); // Delete from IndexedDB
+    await deleteTaskFromServer(currentTask.id); // Delete from Python server
+
     // Call clearEditorArea to reset the UI safely
     clearEditorArea();
     currentTask = null; // Clear the current task
