@@ -165,8 +165,6 @@ export function openTaskEditor(task) {
     currentTask.attachments.push(attachment);
     // Re-render the attachments section to show the new file.
     renderAttachments();
-    // Automatically save the task with the new attachment.
-    saveTask();
   };
 
   // Initialize rich text editors using the editorContainer
@@ -195,7 +193,6 @@ export function openTaskEditor(task) {
       currentTask.categories.push(cat);
       renderCategoryTags();
       renderNewCategoryDropdown(); // Re-render dropdown to remove added category
-      saveTask();
     }
     select.value = '__placeholder'; // Reset dropdown
   });
@@ -224,7 +221,34 @@ function renderStatusOptions(container) {
 }
 
 /**
- * Saves the current task to IndexedDB.
+ * Sends task data to the Python server.
+ * @param {object} task - The task object to save.
+ */
+async function saveTaskToServer(task) {
+    try {
+        const response = await fetch(`http://localhost:12345/save-task/${task.id}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(task)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`Server error: ${response.status} ${response.statusText} - ${errorData.error || response.url}`);
+        }
+
+        const result = await response.json();
+        console.log('Task saved to server:', result);
+    } catch (error) {
+        console.error('Failed to save task to server:', error);
+        showModalAlert(`Error saving task to server: ${error.message}`);
+    }
+}
+
+/**
+ * Saves the current task to IndexedDB and to the server.
  */
 async function saveTask() {
   if (!currentTask) return;
@@ -241,7 +265,11 @@ async function saveTask() {
   currentTask.notes = editorContainer.querySelector(selectors.notesEditor + ' .text-area')?.innerHTML || '';
   currentTask.updatedAt = new Date().toISOString();
 
-  await DB.putTask(currentTask);
+  let newObj = await DB.putTask(currentTask); // Save to IndexedDB
+  // NEW: Save to Python server
+  await saveTaskToServer(currentTask);
+
+
   if (renderTaskListCallback) await renderTaskListCallback(); // Re-render task list
   // After saving, go back to view mode
   if (openTaskViewerCallback) {
@@ -286,7 +314,6 @@ function renderCategoryTags() {
       currentTask.categories.splice(idx, 1);
       renderCategoryTags();
       renderNewCategoryDropdown(); // Re-render dropdown when a tag is removed
-      saveTask();
     });
     list.appendChild(tag);
   });
@@ -302,7 +329,7 @@ function renderNewCategoryDropdown() {
   // Filter out categories already assigned to the current task
   const availableCategories = categories.filter(cat => !currentTask.categories.includes(cat));
 
-  select.innerHTML = '<option value="__placeholder" disabled selected>Add category...</option>' + 
+  select.innerHTML = '<option value="__placeholder" disabled selected>Add category...</option>' +
                      availableCategories.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('\n');
 }
 
@@ -318,12 +345,11 @@ function renderAttachments(){
     const left = document.createElement('div'); left.textContent = att.name;
     const right = document.createElement('div');
     const dl = document.createElement('a'); dl.href = att.data; dl.download = att.name; dl.textContent = 'download';
-    const rm = document.createElement('button'); rm.textContent='remove'; rm.addEventListener('click', async ()=>{ 
+    const rm = document.createElement('button'); rm.textContent='remove'; rm.addEventListener('click', async ()=>{
       const confirmed = await showModalAlertConfirm(`Are you sure you want to remove "${escapeHtml(att.name)}"?`);
       if (confirmed) {
-        currentTask.attachments.splice(idx,1); 
-        renderAttachments(); 
-        saveTask();
+        currentTask.attachments.splice(idx,1);
+        renderAttachments();
       }
     });
     right.appendChild(dl); right.appendChild(document.createTextNode(' ')); right.appendChild(rm);

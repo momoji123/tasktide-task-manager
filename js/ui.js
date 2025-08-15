@@ -90,7 +90,7 @@ export const UI = (function() {
     // Handle new task button: it should open the editor directly for new tasks
     document.getElementById('newTaskBtn')?.addEventListener('click', () => {
         TaskEditorUI.openTaskEditor({
-            id: 'new', // Use a temporary ID for new tasks
+            id: 't_' + Date.now(),
             title: '',
             description: '',
             notes: '',
