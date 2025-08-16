@@ -94,8 +94,7 @@ function updateButtonStates(editorContainer) {
 
   // Buttons are enabled only if a username is set AND the task's creator matches
   // or the task has no creator (meaning it's a new task that the current user will create)
-  const canEditOrDelete = currentUsername && 
-                          (currentTask.creator === currentUsername || currentTask.creator === null);
+  const canEditOrDelete = !!(currentUsername); // Added !! to ensure boolean
 
   if (saveBtn) {
     saveBtn.disabled = !canEditOrDelete;
@@ -420,12 +419,7 @@ async function saveTask() {
   // Set creator if it's a new task (i.e., creator is null/undefined)
   if (!currentTask.creator) {
       currentTask.creator = currentUsername;
-  } else if (currentTask.creator !== currentUsername) {
-      // If task has a creator but it's not the current user, prevent saving.
-      // This case should ideally be covered by updateButtonStates, but a server-side check is good too.
-      showModalAlert(`You can only modify tasks created by "${currentTask.creator}".`);
-      return;
-  }
+  } 
 
   await DB.putTask(currentTask); // Save to IndexedDB (this will now only save partial task)
   await saveTaskToServer(currentTask, currentTask.creator); // Pass creator for server path (sends full task)

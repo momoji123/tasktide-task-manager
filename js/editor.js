@@ -15,11 +15,19 @@ export const Editor = (function(){
   function init(container, { onAttach } = {}){
     if (!container) {
       console.error('Editor container element not found for initialization.');
+      // Ensure that even if container is not found, we return an object with expected methods
+      // that gracefully do nothing or log an error, preventing further issues.
+      currentEditorInstance = null;
+      currentToolbar = null;
+      currentAttachInput = null;
       return {
         getHTML: () => '',
         setHTML: () => {},
         focus: () => {},
-        setEditable: () => {} // Return a no-op setEditable for consistency
+        setEditable: (editable) => {
+          // Log an error if setEditable is called on an uninitialized editor
+          console.error('setEditable called on an uninitialized editor (no container).');
+        } 
       };
     }
 
@@ -46,42 +54,46 @@ export const Editor = (function(){
     currentToolbar = toolbar;
     currentAttachInput = attachInput;
 
-    toolbar.addEventListener('click', (e)=>{
-      const btn = e.target.closest('button');
-      if(!btn || btn.disabled) return; // Prevent action if button is disabled
+    if (toolbar) { // Add null check for toolbar
+      toolbar.addEventListener('click', (e)=>{
+        const btn = e.target.closest('button');
+        if(!btn || btn.disabled) return; // Prevent action if button is disabled
 
-      const cmd = btn.dataset.cmd;
-      if(cmd === 'createLink'){
-        const url = prompt('Enter URL');
-        if(url) document.execCommand('createLink',false,url);
-      } else if(cmd === 'attach'){
-        // The attach button now simply triggers the hidden file input.
-        attachInput.click();
-      } else {
-        document.execCommand(cmd,false,null);
-      }
-    });
+        const cmd = btn.dataset.cmd;
+        if(cmd === 'createLink'){
+          const url = prompt('Enter URL');
+          if(url) document.execCommand('createLink',false,url);
+        } else if(cmd === 'attach'){
+          // The attach button now simply triggers the hidden file input.
+          if (attachInput) attachInput.click(); // Add null check for attachInput
+        } else {
+          document.execCommand(cmd,false,null);
+        }
+      });
+    }
 
     // This event listener triggers when a user selects a file.
-    attachInput.addEventListener('change', async (e)=>{
-      const f = e.target.files[0];
-      if(!f) return;
-      // The selected file is converted to a Base64 Data URL for storage.
-      const dataUrl = await fileToDataURL(f);
-      
-      // If the 'onAttach' callback was provided during initialization, it is called here.
-      // We pass an object containing the file's name, type, and its data URL content.
-      // This decouples the editor from the main UI's attachment handling logic.
-      if(onAttach){
-        onAttach({
-          name: f.name,
-          type: f.type,
-          data: dataUrl
-        });
-      }
-      // The file input is reset to allow attaching the same file again if needed.
-      e.target.value = '';
-    });
+    if (attachInput) { // Add null check for attachInput
+      attachInput.addEventListener('change', async (e)=>{
+        const f = e.target.files[0];
+        if(!f) return;
+        // The selected file is converted to a Base64 Data URL for storage.
+        const dataUrl = await fileToDataURL(f);
+        
+        // If the 'onAttach' callback was provided during initialization, it is called here.
+        // We pass an object containing the file's name, type, and its data URL content.
+        // This decouples the editor from the main UI's attachment handling logic.
+        if(onAttach){
+          onAttach({
+            name: f.name,
+            type: f.type,
+            data: dataUrl
+          });
+        }
+        // The file input is reset to allow attaching the same file again if needed.
+        e.target.value = '';
+      });
+    }
 
     // Helper function to convert a File object to a Data URL.
     function fileToDataURL(file){
@@ -94,9 +106,9 @@ export const Editor = (function(){
     }
 
     return {
-      getHTML: ()=>ed.innerHTML,
-      setHTML: html => ed.innerHTML = html,
-      focus: ()=>ed.focus(),
+      getHTML: ()=> ed ? ed.innerHTML : '', // Add null check for ed
+      setHTML: html => { if (ed) ed.innerHTML = html; }, // Add null check for ed
+      focus: ()=> { if (ed) ed.focus(); }, // Add null check for ed
       setEditable: (editable) => {
         // This closure ensures setEditable has access to 'ed', 'toolbar', 'attachInput'
         setEditable(ed, toolbar, attachInput, editable);
@@ -113,14 +125,17 @@ export const Editor = (function(){
    * @param {boolean} editable - True to make it editable, false to make it read-only.
    */
   function setEditable(editorTextArea, toolbarEl, attachInputEl, editable) {
+    // Ensure editorTextArea is not null before setting contentEditable
     if (editorTextArea) {
-      editorTextArea.contentEditable = editable;
+      editorTextArea.contentEditable = editable.toString(); // Convert boolean to string "true" or "false"
       // Add/remove a class for visual feedback (e.g., dimmer background for read-only)
       if (editable) {
         editorTextArea.classList.remove('read-only');
       } else {
         editorTextArea.classList.add('read-only');
       }
+    } else {
+        console.error('Editor text area element is null. Cannot set contentEditable.');
     }
 
     // Disable/enable toolbar buttons
@@ -128,11 +143,15 @@ export const Editor = (function(){
       toolbarEl.querySelectorAll('button').forEach(button => {
         button.disabled = !editable;
       });
+    } else {
+        console.warn('Toolbar element is null. Cannot disable/enable buttons.');
     }
 
     // Disable/enable attachment input
     if (attachInputEl) {
       attachInputEl.disabled = !editable;
+    } else {
+        console.warn('Attachment input element is null. Cannot disable/enable input.');
     }
   }
 

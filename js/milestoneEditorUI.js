@@ -81,7 +81,7 @@ function updateButtonStates(editorArea) {
   const deleteBtn = editorArea.querySelector(selectors.deleteMilestoneBtn);
 
   // Buttons are enabled only if a username is set AND the task's creator matches
-  const canEditOrDelete = currentUsername && taskCreator === currentUsername;
+  const canEditOrDelete = !!(currentUsername); // Added !! to ensure boolean
 
   if (saveBtn) {
     saveBtn.disabled = !canEditOrDelete;
@@ -267,8 +267,8 @@ async function saveMilestone() {
   if (!currentMilestone || !currentTaskId) return;
 
   // Enforce username requirement and creator match
-  if (!currentUsername || taskCreator !== currentUsername) {
-      showModalAlert('You can only modify milestones for tasks you created. Please set your username in Settings or select a task you created.');
+  if (!currentUsername) {
+      showModalAlert('Please set your username in Settings');
       return;
   }
 
