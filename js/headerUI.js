@@ -212,7 +212,7 @@ async function manageList(type, title, renderFilterCategoriesMultiSelectCallback
             showModalAlert(`Cannot delete "From" source "${itemToRemove}" because it is currently used by one or more tasks.`);
           }
         }
-        
+
         if (isInUse) {
           return; // Prevent deletion if in use
         }
@@ -371,7 +371,7 @@ async function clearAllData() {
     req.onsuccess = () => {
       console.log("Database deleted successfully");
       // Also clear any localStorage if used for other settings (though this app primarily uses IndexedDB)
-      localStorage.clear(); 
+      localStorage.clear();
       // Reload the page to reflect the cleared state
       window.location.reload();
     };
@@ -384,34 +384,98 @@ async function clearAllData() {
 }
 
 /**
- * Exports all tasks, categories, statuses, and froms as a JSON file.
+ * Opens a modal for the user to select tasks for export, then exports the selected tasks.
  */
 async function exportJSON() {
   const allTasks = await DB.getAllTasks();
-  
-  // Fetch all milestones and attach them to their respective tasks
-  const tasksWithMilestones = await Promise.all(allTasks.map(async (task) => {
-    const milestones = await DB.getMilestonesForTask(task.id);
-    return { ...task, milestones: milestones };
-  }));
 
-  const data = {
-      tasks: tasksWithMilestones, // Include tasks with nested milestones
-      categories: categories,
-      statuses: statuses,
-      froms: froms,
-  };
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
-    type: 'application/json'
+  // Get the task export modal template and clone it
+  const modalTemplate = document.getElementById('task-export-modal-template');
+  if (!modalTemplate) {
+    console.error('Task export modal template not found.');
+    return;
+  }
+  const modalClone = modalTemplate.content.cloneNode(true);
+  const modalBackdrop = modalClone.querySelector('.modal-backdrop');
+  const taskSelectionList = modalClone.querySelector('#taskSelectionList');
+  const selectAllBtn = modalClone.querySelector('#selectAllTasksBtn');
+  const deselectAllBtn = modalClone.querySelector('#deselectAllTasksBtn');
+  const exportSelectedBtn = modalClone.querySelector('#exportSelectedTasksBtn');
+  const cancelBtn = modalClone.querySelector('.modal-cancel');
+  const closeBtn = modalClone.querySelector('.modal-close');
+
+  // Populate the task list with checkboxes
+  taskSelectionList.innerHTML = '';
+  allTasks.forEach(task => {
+    const taskItem = document.createElement('div');
+    taskItem.className = 'task-selection-item';
+    taskItem.innerHTML = `
+      <input type="checkbox" id="task-${task.id}" value="${task.id}" checked>
+      <label for="task-${task.id}">${escapeHtml(task.title)}</label>
+    `;
+    taskSelectionList.appendChild(taskItem);
   });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'task-export.json';
-  a.click();
-  URL.revokeObjectURL(url);
-  showModalAlert('Data exported successfully!');
+
+  document.body.appendChild(modalBackdrop);
+
+  const checkboxes = taskSelectionList.querySelectorAll('input[type="checkbox"]');
+
+  selectAllBtn.addEventListener('click', () => {
+    checkboxes.forEach(checkbox => checkbox.checked = true);
+  });
+
+  deselectAllBtn.addEventListener('click', () => {
+    checkboxes.forEach(checkbox => checkbox.checked = false);
+  });
+
+  return new Promise(resolve => {
+    const cleanupAndResolve = (result) => {
+      modalBackdrop.remove();
+      resolve(result);
+    };
+
+    exportSelectedBtn.onclick = async () => {
+      const selectedTaskIds = Array.from(checkboxes)
+                                .filter(cb => cb.checked)
+                                .map(cb => cb.value);
+
+      if (selectedTaskIds.length === 0) {
+        showModalAlert('Please select at least one task to export.');
+        return;
+      }
+
+      const selectedTasks = allTasks.filter(task => selectedTaskIds.includes(task.id));
+
+      // Fetch all milestones and attach them to their respective tasks
+      const tasksWithMilestones = await Promise.all(selectedTasks.map(async (task) => {
+        const milestones = await DB.getMilestonesForTask(task.id);
+        return { ...task, milestones: milestones };
+      }));
+
+      const data = {
+          tasks: tasksWithMilestones,
+          categories: categories, // Still export all categories/statuses/froms
+          statuses: statuses,
+          froms: froms,
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: 'application/json'
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'selected-tasks-export.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      showModalAlert('Selected tasks exported successfully!');
+      cleanupAndResolve(true); // Resolve with true indicating export was successful
+    };
+
+    cancelBtn.onclick = () => cleanupAndResolve(false);
+    closeBtn.onclick = () => cleanupAndResolve(false); // Treat closing via 'x' as cancel
+  });
 }
+
 
 /**
  * Imports tasks, categories, statuses, and froms from a JSON file.
@@ -426,7 +490,7 @@ async function importJSON(e) {
     if (j.categories) {
       categories.push(...j.categories);
       // Remove duplicates
-      categories = [...new Set(categories)]; 
+      categories = [...new Set(categories)];
       if (updateLeftMenuTaskUICallback) updateLeftMenuTaskUICallback({ categories: categories });
       if (updateTaskEditorUICallback) updateTaskEditorUICallback({ categories: categories });
     }
@@ -445,13 +509,13 @@ async function importJSON(e) {
       if (updateLeftMenuTaskUICallback) updateLeftMenuTaskUICallback({ froms: froms });
       if (updateTaskEditorUICallback) updateTaskEditorUICallback({ froms: froms });
     }
-    
+
     if (j.tasks) {
       for (const t of j.tasks) {
         // Temporarily extract milestones if they exist
         const milestonesToImport = t.milestones || [];
         // Remove milestones property from task before saving the task itself
-        delete t.milestones; 
+        delete t.milestones;
         await DB.putTask(t);
 
         // Save associated milestones
@@ -463,7 +527,7 @@ async function importJSON(e) {
     await DB.putMeta('categories', categories);
     await DB.putMeta('statuses', statuses);
     await DB.putMeta('froms', froms);
-    
+
     // Call callbacks provided by the main UI module
     if (renderTaskListCallback) await renderTaskListCallback();
     if (document.querySelector(selectors.settingsDropdown) && document.querySelector(selectors.settingsDropdown).classList.contains('show')) {

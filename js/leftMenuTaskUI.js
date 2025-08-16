@@ -521,7 +521,6 @@ function renderTaskItems(container, tasksToRender) {
       }
       renderTaskList(); // Re-render task list to update selection highlight
     });
-    console.log(container)
     container.appendChild(node);
   });
 }
