@@ -150,7 +150,6 @@ async function loadTaskFromServer(taskId, username) {
             throw new Error(`Server error: ${response.status} ${response.statusText} - ${errorData.error || response.url}`);
         }
         const taskData = await response.json();
-        console.log('Task loaded from server:', taskData);
         return taskData;
     } catch (error) {
         console.error('Failed to load task from server:', error);
@@ -355,7 +354,6 @@ async function saveTaskToServer(task, username) {
         }
 
         const result = await response.json();
-        console.log('Task saved to server:', result);
     } catch (error) {
         console.error('Failed to save task to server:', error);
         showModalAlert(`Error saving task to server: ${error.message}`);
@@ -383,7 +381,6 @@ async function deleteTaskFromServer(taskId, username) {
         }
 
         const result = await response.json();
-        console.log('Task and its folder deleted from server:', result);
     } catch (error) {
         console.error('Failed to delete task and its folder from server:', error);
         showModalAlert(`Error deleting task and its folder from server: ${error.message}`);

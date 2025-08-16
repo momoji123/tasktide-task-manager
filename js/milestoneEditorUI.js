@@ -127,7 +127,6 @@ async function saveMilestoneToServer(milestone, taskId, username) {
         }
 
         const result = await response.json();
-        console.log('Milestone saved to server:', result);
     } catch (error) {
         console.error('Failed to save milestone to server:', error);
         showModalAlert(`Error saving milestone to server: ${error.message}`);
@@ -156,7 +155,6 @@ async function deleteMilestoneFromServer(milestoneId, taskId, username) {
         }
 
         const result = await response.json();
-        console.log('Milestone deleted from server:', result);
     } catch (error) {
         console.error('Failed to delete milestone from server:', error);
         showModalAlert(`Error deleting milestone from server: ${error.message}`);

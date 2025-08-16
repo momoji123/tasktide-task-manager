@@ -58,7 +58,6 @@ async function loadTaskFromServer(taskId, username) {
           throw new Error(`Server error: ${response.status} ${response.statusText} - ${errorData.error || response.url}`);
       }
       const taskData = await response.json();
-      console.log('Task loaded from server:', taskData);
       return taskData;
   } catch (error) {
       console.error('Failed to load task from server:', error);
