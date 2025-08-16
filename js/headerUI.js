@@ -400,7 +400,6 @@ async function exportJSON() {
       categories: categories,
       statuses: statuses,
       froms: froms,
-      username: username // Include username in export
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], {
     type: 'application/json'
@@ -425,25 +424,26 @@ async function importJSON(e) {
   try {
     const j = JSON.parse(txt);
     if (j.categories) {
-      categories = j.categories;
+      categories.push(...j.categories);
+      // Remove duplicates
+      categories = [...new Set(categories)]; 
       if (updateLeftMenuTaskUICallback) updateLeftMenuTaskUICallback({ categories: categories });
       if (updateTaskEditorUICallback) updateTaskEditorUICallback({ categories: categories });
     }
     if (j.statuses) {
-      statuses = j.statuses;
+      statuses.push(...j.statuses);
+      // Remove duplicate
+      statuses = [...new Set(statuses)];
       if (updateLeftMenuTaskUICallback) updateLeftMenuTaskUICallback({ statuses: statuses });
       if (updateTaskEditorUICallback) updateTaskEditorUICallback({ statuses: statuses });
       if (updateMilestoneEditorUICallback) updateMilestoneEditorUICallback({ statuses: statuses });
     }
     if (j.froms) {
-      froms = j.froms;
+      froms.push(...j.froms);
+      // Remove duplicate
+      froms = [...new Set(froms)];
       if (updateLeftMenuTaskUICallback) updateLeftMenuTaskUICallback({ froms: froms });
       if (updateTaskEditorUICallback) updateTaskEditorUICallback({ froms: froms });
-    }
-    if (j.username !== undefined) { // Import username
-        username = j.username;
-        await DB.putMeta('username', username);
-        if (updateUsernameCallback) updateUsernameCallback(username);
     }
     
     if (j.tasks) {
