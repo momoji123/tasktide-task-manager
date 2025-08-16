@@ -3,6 +3,7 @@
 
 import { escapeHtml } from './utilUI.js';
 import { Editor } from './editor.js'; // Import Editor for rendering static content
+import { loadTaskFromServer } from './apiService.js'; // Import from centralized API service
 
 // Internal state for the currently viewed task
 let currentTask = null;
@@ -39,41 +40,13 @@ export function initTaskViewerUI(onOpenTaskEditor, onOpenMilestonesView) {
 }
 
 /**
- * Loads a task's full details from the server.
- * This is a duplicate of the function in taskEditorUI.js to avoid circular dependencies
- * or complex shared state management. In a larger app, this would be in a shared service.
- * @param {string} taskId - The ID of the task to load.
- * @param {string} username - The username (creator) of the task.
- * @returns {Promise<object|null>} The full task object or null if not found/error.
- */
-async function loadTaskFromServer(taskId, username) {
-  if (!username) {
-      console.error('Error: Username is not set. Cannot load task from server.');
-      return null;
-  }
-  try {
-      const response = await fetch(`http://localhost:12345/load-task/${username}/${taskId}`);
-      if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(`Server error: ${response.status} ${response.statusText} - ${errorData.error || response.url}`);
-      }
-      const taskData = await response.json();
-      return taskData;
-  } catch (error) {
-      console.error('Failed to load task from server:', error);
-      // Removed showModalAlert to avoid duplicate alerts if taskEditorUI also tries to load
-      return null;
-  }
-}
-
-/**
  * Opens the task viewer for a given task.
  * @param {object} task - The task object to view.
  */
 export async function openTaskViewer(task, isNewTask = false) {
   // If description, notes, or attachments are missing, fetch the full task from the server
   if (!isNewTask && (!task.description || !task.notes || !task.attachments)) {
-      const fullTask = await loadTaskFromServer(task.id, task.creator);
+      const fullTask = await loadTaskFromServer(task.creator, task.id); // Use centralized API service
       if (fullTask) {
           currentTask = fullTask; // Use the full task from the server
       } else {

@@ -4,6 +4,7 @@
 
 import { DB } from './storage.js';
 import { escapeHtml } from './utilUI.js';
+import { loadTaskFromServer } from './apiService.js'; // Import from centralized API service
 
 // Internal state, initialized by the main UI module
 let categories = [];
@@ -188,35 +189,6 @@ export function updateLeftMenuTaskUIState(updatedState) {
   renderFilterStatusMultiSelect(); // Re-render the new status multi-select
   renderTaskList(); // Re-render task list after state changes
 }
-
-/**
- * Loads a task's full details from the server.
- * This is a duplicate of the function in taskEditorUI.js to avoid circular dependencies
- * or complex shared state management. In a larger app, this would be in a shared service.
- * @param {string} taskId - The ID of the task to load.
- * @param {string} username - The username (creator) of the task.
- * @returns {Promise<object|null>} The full task object or null if not found/error.
- */
-async function loadTaskFromServer(taskId, username) {
-    if (!username) {
-        // showModalAlert('Error: Username is not set. Cannot load task from server.'); // Avoid duplicate alerts
-        return null;
-    }
-    try {
-        const response = await fetch(`http://localhost:12345/load-task/${username}/${taskId}`);
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(`Server error: ${response.status} ${response.statusText} - ${errorData.error || response.url}`);
-        }
-        const taskData = await response.json();
-        return taskData;
-    } catch (error) {
-        console.error('Failed to load task from server:', error);
-        // showModalAlert(`Error loading task from server: ${error.message}`); // Avoid duplicate alerts
-        return null;
-    }
-}
-
 
 /**
  * Renders the list of tasks based on current filters and sorting/grouping.
@@ -511,7 +483,7 @@ function renderTaskItems(container, tasksToRender) {
       let fullTask = t;
       // Only attempt to load if it has a creator and missing full details
       if (t.creator && (!t.description || !t.notes || !t.attachments)) {
-          fullTask = await loadTaskFromServer(t.id, t.creator) || t; // Fallback to partial if load fails
+          fullTask = await loadTaskFromServer(t.creator, t.id) || t; // Use centralized API service
       }
 
       // When an existing task is clicked, open the viewer

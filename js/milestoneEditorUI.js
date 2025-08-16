@@ -5,6 +5,7 @@
 import { DB } from './storage.js';
 import { Editor } from './editor.js'; // Assuming Editor is a separate module
 import { escapeHtml, showModalAlert, showModalAlertConfirm } from './utilUI.js';
+import { saveMilestoneToServer, deleteMilestoneFromServer } from './apiService.js'; // Import from centralized API service
 
 // Internal state for global options and callbacks
 let statuses = [];
@@ -100,67 +101,6 @@ function updateButtonStates(editorArea) {
     input.disabled = !canEditOrDelete;
   });
 }
-
-/**
- * Sends milestone data to the Python server.
- * @param {object} milestone - The milestone object to save.
- * @param {string} taskId - The ID of the parent task.
- * @param {string} username - The username of the task creator.
- */
-async function saveMilestoneToServer(milestone, taskId, username) {
-    if (!username) {
-        showModalAlert('Error: Task creator username is not available. Cannot save milestone.');
-        return;
-    }
-    try {
-        const response = await fetch(`http://localhost:12345/save-milestone/${username}/${taskId}/${milestone.id}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(milestone)
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(`Server error: ${response.status} ${response.statusText} - ${errorData.error || response.url}`);
-        }
-
-        const result = await response.json();
-    } catch (error) {
-        console.error('Failed to save milestone to server:', error);
-        showModalAlert(`Error saving milestone to server: ${error.message}`);
-    }
-}
-
-/**
- * Deletes milestone data from the Python server.
- * @param {string} milestoneId - The ID of the milestone to delete.
- * @param {string} taskId - The ID of the parent task.
- * @param {string} username - The username of the task creator.
- */
-async function deleteMilestoneFromServer(milestoneId, taskId, username) {
-    if (!username) {
-        showModalAlert('Error: Task creator username is not available. Cannot delete milestone.');
-        return;
-    }
-    try {
-        const response = await fetch(`http://localhost:12345/delete-milestone/${username}/${taskId}/${milestoneId}`, {
-            method: 'DELETE'
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(`Server error: ${response.status} ${response.statusText} - ${errorData.error || response.url}`);
-        }
-
-        const result = await response.json();
-    } catch (error) {
-        console.error('Failed to delete milestone from server:', error);
-        showModalAlert(`Error deleting milestone from server: ${error.message}`);
-    }
-}
-
 
 /**
  * Opens the milestone editor for a given milestone.
@@ -282,7 +222,12 @@ async function saveMilestone() {
   currentMilestone.updatedAt = new Date().toISOString();
 
   await DB.putMilestone(currentMilestone); // Save to IndexedDB
-  await saveMilestoneToServer(currentMilestone, currentTaskId, taskCreator); // Pass creator for server path
+  try {
+    await saveMilestoneToServer(currentMilestone, currentTaskId, taskCreator); // Use centralized API service
+    showModalAlert('Milestone saved!');
+  } catch (error) {
+    showModalAlert(`Error saving milestone: ${error.message}`);
+  }
   
   // Re-render bubbles in the current modal using the callback
   if (renderMilestoneBubblesCallback) {
@@ -292,7 +237,6 @@ async function saveMilestone() {
         renderMilestoneBubblesCallback(currentTaskId, milestonesGraphContainer);
     }
   }
-  showModalAlert('Milestone saved!');
   // Re-open editor to ensure dropdowns are re-rendered if global lists change
   openMilestoneEditor(currentMilestone, currentTaskId);
 }
@@ -323,30 +267,34 @@ async function deleteMilestone() {
   const confirmed = await showModalAlertConfirm(`Are you sure you want to delete milestone "${escapeHtml(currentMilestone.title)}"?`);
 
   if (confirmed) {
-    await DB.deleteMilestone(currentMilestone.id); // Delete from IndexedDB
-    await deleteMilestoneFromServer(currentMilestone.id, currentTaskId, taskCreator); // Pass creator for server path
+    try {
+      await DB.deleteMilestone(currentMilestone.id); // Delete from IndexedDB
+      await deleteMilestoneFromServer(currentMilestone.id, currentTaskId, taskCreator); // Use centralized API service
 
-    currentMilestone = null; // Clear selected milestone
-    if (updateCurrentMilestoneCallback) updateCurrentMilestoneCallback(null); // Inform graph UI no milestone is selected
-    
-    // Clear milestone editor area
-    const milestoneEditorArea = document.querySelector(selectors.milestoneEditorArea);
-    if (milestoneEditorArea) {
-      milestoneEditorArea.innerHTML = '<div class="placeholder">Select a milestone to edit or add a new one.</div>';
-    }
-
-    // Re-render bubbles in the current modal
-    if (renderMilestoneBubblesCallback) {
-      // Find the actual milestonesGraphContainer which should be a parent of the editor area
-      const milestonesGraphContainer = document.querySelector(selectors.milestonesGraphContainer);
-      if (milestonesGraphContainer) {
-        renderMilestoneBubblesCallback(currentTaskId, milestonesGraphContainer);
+      currentMilestone = null; // Clear selected milestone
+      if (updateCurrentMilestoneCallback) updateCurrentMilestoneCallback(null); // Inform graph UI no milestone is selected
+      
+      // Clear milestone editor area
+      const milestoneEditorArea = document.querySelector(selectors.milestoneEditorArea);
+      if (milestoneEditorArea) {
+        milestoneEditorArea.innerHTML = '<div class="placeholder">Select a milestone to edit or add a new one.</div>';
       }
-    }
-    showModalAlert('Milestone deleted!');
-    const milestonesPage = document.querySelector(selectors.milestonesPage);
-    if (milestonesPage) {
-        milestonesPage.querySelector('.milestones-view-body-grid').classList.add('editor-hidden');
+
+      // Re-render bubbles in the current modal
+      if (renderMilestoneBubblesCallback) {
+        // Find the actual milestonesGraphContainer which should be a parent of the editor area
+        const milestonesGraphContainer = document.querySelector(selectors.milestonesGraphContainer);
+        if (milestonesGraphContainer) {
+          renderMilestoneBubblesCallback(currentTaskId, milestonesGraphContainer);
+        }
+      }
+      showModalAlert('Milestone deleted!');
+      const milestonesPage = document.querySelector(selectors.milestonesPage);
+      if (milestonesPage) {
+          milestonesPage.querySelector('.milestones-view-body-grid').classList.add('editor-hidden');
+      }
+    } catch (error) {
+      showModalAlert(`Error deleting milestone: ${error.message}`);
     }
   }
 }

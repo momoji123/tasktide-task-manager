@@ -1,10 +1,11 @@
-// taskEditorUI.js
+// js/taskEditorUI.js
 // This module manages the main task editing area, including displaying,
 // saving, deleting tasks, and handling task-specific categories and attachments.
 
 import { DB } from './storage.js';
 import { Editor } from './editor.js';
 import { escapeHtml, showModalAlert, showModalAlertConfirm } from './utilUI.js';
+import { loadTaskFromServer, saveTaskToServer, deleteTaskFromServer } from './apiService.js'; // Import from centralized API service
 
 // Internal state for the currently edited task and global options
 let currentTask = null;
@@ -133,33 +134,6 @@ function updateButtonStates(editorContainer) {
 }
 
 /**
- * Loads a task's full details from the server.
- * @param {string} taskId - The ID of the task to load.
- * @param {string} username - The username (creator) of the task.
- * @returns {Promise<object|null>} The full task object or null if not found/error.
- */
-async function loadTaskFromServer(taskId, username) {
-    if (!username) {
-        showModalAlert('Error: Username is not set. Cannot load task from server.');
-        return null;
-    }
-    try {
-        const response = await fetch(`http://localhost:12345/load-task/${username}/${taskId}`);
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(`Server error: ${response.status} ${response.statusText} - ${errorData.error || response.url}`);
-        }
-        const taskData = await response.json();
-        return taskData;
-    } catch (error) {
-        console.error('Failed to load task from server:', error);
-        showModalAlert(`Error loading task from server: ${error.message}`);
-        return null;
-    }
-}
-
-
-/**
  * Opens the task editor for a given task.
  * @param {object} task - The task object to edit.
  */
@@ -170,7 +144,7 @@ export async function openTaskEditor(task, isNewTask = false) {
           showModalAlert('Cannot load full task details: Task creator is not set. Please save the task first if it\'s new, or ensure your username is set if it\'s an existing task.');
           return;
       }
-      const fullTask = await loadTaskFromServer(task.id, task.creator);
+      const fullTask = await loadTaskFromServer(task.creator, task.id); // Use centralized API service
       if (fullTask) {
           currentTask = fullTask; // Use the full task from the server
       } else {
@@ -330,65 +304,6 @@ function renderStatusOptions(container) {
 }
 
 /**
- * Sends task data to the Python server.
- * @param {object} task - The task object to save.
- * @param {string} username - The username of the task creator.
- */
-async function saveTaskToServer(task, username) {
-    if (!username) {
-        showModalAlert('Error: Username is not set. Cannot save task.');
-        return;
-    }
-    try {
-        const response = await fetch(`http://localhost:12345/save-task/${username}/${task.id}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(task)
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(`Server error: ${response.status} ${response.statusText} - ${errorData.error || response.url}`);
-        }
-
-        const result = await response.json();
-    } catch (error) {
-        console.error('Failed to save task to server:', error);
-        showModalAlert(`Error saving task to server: ${error.message}`);
-    }
-}
-
-/**
- * Deletes a task and its associated folder from the Python server.
- * @param {string} taskId - The ID of the task to delete.
- * @param {string} username - The username of the task creator.
- */
-async function deleteTaskFromServer(taskId, username) {
-    if (!username) {
-        showModalAlert('Error: Username is not set. Cannot delete task.');
-        return;
-    }
-    try {
-        const response = await fetch(`http://localhost:12345/delete-task/${username}/${taskId}`, {
-            method: 'DELETE'
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(`Server error: ${response.status} ${response.statusText} - ${errorData.error || response.url}`);
-        }
-
-        const result = await response.json();
-    } catch (error) {
-        console.error('Failed to delete task and its folder from server:', error);
-        showModalAlert(`Error deleting task and its folder from server: ${error.message}`);
-    }
-}
-
-
-/**
  * Saves the current task to IndexedDB and to the server.
  */
 async function saveTask() {
@@ -419,7 +334,12 @@ async function saveTask() {
   } 
 
   await DB.putTask(currentTask); // Save to IndexedDB (this will now only save partial task)
-  await saveTaskToServer(currentTask, currentTask.creator); // Pass creator for server path (sends full task)
+  try {
+    await saveTaskToServer(currentTask, currentTask.creator); // Use centralized API service
+    showModalAlert('Task saved!');
+  } catch (error) {
+    showModalAlert(`Error saving task: ${error.message}`);
+  }
 
 
   if (renderTaskListCallback) await renderTaskListCallback(); // Re-render task list
@@ -430,7 +350,6 @@ async function saveTask() {
       // Fallback if viewer callback isn't set (shouldn't happen with proper init)
       openTaskEditor(currentTask); // Re-open editor to show updated state (e.g. updated date)
   }
-  showModalAlert('Task saved!');
 }
 
 /**
@@ -448,14 +367,18 @@ async function deleteTask() {
   const confirmed = await showModalAlertConfirm(`Are you sure you want to delete task "${escapeHtml(currentTask.title)}"? This will also delete all associated milestones.`);
 
   if (confirmed) {
-    await DB.deleteTask(currentTask.id); // Delete from IndexedDB
-    await deleteTaskFromServer(currentTask.id, currentTask.creator); // Pass creator for server path
+    try {
+      await DB.deleteTask(currentTask.id); // Delete from IndexedDB
+      await deleteTaskFromServer(currentTask.id, currentTask.creator); // Use centralized API service
 
-    // Call clearEditorArea to reset the UI safely
-    clearEditorArea();
-    currentTask = null; // Clear the current task
-    if (renderTaskListCallback) await renderTaskListCallback(); // Re-render task list
-    showModalAlert('Task deleted!');
+      // Call clearEditorArea to reset the UI safely
+      clearEditorArea();
+      currentTask = null; // Clear the current task
+      if (renderTaskListCallback) await renderTaskListCallback(); // Re-render task list
+      showModalAlert('Task deleted!');
+    } catch (error) {
+      showModalAlert(`Error deleting task: ${error.message}`);
+    }
   }
 }
 
