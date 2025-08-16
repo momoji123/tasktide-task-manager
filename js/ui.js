@@ -74,9 +74,9 @@ export const UI = (function() {
       updateUsernameInUI // Pass the new callback
     );
 
-    // LeftMenuTaskUI needs: initial state, and callback to open the task viewer (default)
-    // When a task is clicked, it opens in view mode
-    LeftMenuTaskUI.initLeftMenuTaskUI(commonState, TaskViewerUI.openTaskViewer);
+    // LeftMenuTaskUI needs: initial state, and callbacks to open the task editor (for new tasks)
+    // and the task viewer (for existing tasks).
+    LeftMenuTaskUI.initLeftMenuTaskUI(commonState, TaskEditorUI.openTaskEditor, TaskViewerUI.openTaskViewer); // CHANGED
 
     // TaskEditorUI needs: initial state, and callbacks to re-render task list, open milestone view, and open task viewer
     // TaskEditorUI now gets a callback to open the viewer after saving a task

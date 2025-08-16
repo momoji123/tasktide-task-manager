@@ -11,7 +11,9 @@ let statuses = [];
 let filterSectionVisible = true;
 let selectedFilterCategories = [];
 let selectedFilterStatuses = []; // New state for multi-select status filter
-let openTaskEditorCallback = null; // Callback to open the task editor
+// Renamed and added new callbacks for clarity and specific routing
+let openTaskEditorFn = null; // Callback to open the task editor (for new tasks or editing existing)
+let openTaskViewerFn = null; // Callback to open the task viewer (for viewing existing tasks)
 let currentSelectedTaskId = null; // New state to hold the ID of the currently selected task
 let currentUsername = null; // To get the current user's username for loading tasks
 
@@ -48,9 +50,10 @@ const selectors = {
 /**
  * Initializes left menu task UI event listeners and state.
  * @param {object} initialState - Object containing initial categories, statuses, filter states, and username.
- * @param {function} onOpenTaskEditor - Callback function to open the task editor/viewer.
+ * @param {function} onOpenEditor - Callback function to open the task editor.
+ * @param {function} onOpenViewer - Callback function to open the task viewer.
  */
-export async function initLeftMenuTaskUI(initialState, onOpenTaskEditor) {
+export async function initLeftMenuTaskUI(initialState, onOpenEditor, onOpenViewer) { // CHANGED: Added onOpenViewer
   categories = initialState.categories;
   statuses = initialState.statuses;
   filterSectionVisible = initialState.filterSectionVisible;
@@ -58,24 +61,9 @@ export async function initLeftMenuTaskUI(initialState, onOpenTaskEditor) {
   selectedFilterStatuses = initialState.selectedFilterStatuses || []; 
   currentUsername = initialState.username; // Initialize username
 
-  // Wrap the original onOpenTaskEditor to also track the selected task ID
-  // and fetch full task data from server before opening editor/viewer
-  openTaskEditorCallback = async (task, isNewTask = false) => { // Added isNewTask parameter
-    currentSelectedTaskId = task ? task.id : null; // Set current selected task ID
-    
-    console.log(isNewTask)
-    let fullTask = task;
-    // Only attempt to load if it's NOT a brand new task AND it has a creator AND it's a partial task
-    if (!isNewTask && task.creator && (!task.description || !task.notes || !task.attachments)) {
-        fullTask = await loadTaskFromServer(task.id, task.creator) || task; // Fallback to partial if load fails
-    }
-
-    if (onOpenTaskEditor) {
-      onOpenTaskEditor(fullTask, isNewTask); // Pass the potentially full task to the viewer/editor
-    }
-    // Re-added: renderTaskList() here to update selection highlight
-    renderTaskList(); 
-  };
+  // Assign the passed-in functions to the internal module variables
+  openTaskEditorFn = onOpenEditor; // Stores the editor callback
+  openTaskViewerFn = onOpenViewer; // Stores the viewer callback
 
   // Apply initial filter section visibility state
   const appContainer = document.querySelector('.app');
@@ -105,8 +93,11 @@ export async function initLeftMenuTaskUI(initialState, onOpenTaskEditor) {
       updatedAt: new Date().toISOString(),
       creator: currentUsername
     };
-    // Pass true for isNewTask
-    if (openTaskEditorCallback) openTaskEditorCallback(emptyTask, true);
+    // When New Task button is clicked, directly open the TaskEditorUI
+    if (openTaskEditorFn) { // Use the dedicated editor function
+        openTaskEditorFn(emptyTask, true); // Pass true for isNewTask
+    }
+    renderTaskList(); // Re-render task list to update selection highlight (if any)
   });
 
   // Event listeners for filters and sorting
@@ -269,7 +260,7 @@ export async function renderTaskList() {
     }
 
     // Status filter (multi-select)
-    // If selectedFilterStatuses is empty, it means "select all" (no filter applied)
+    // If selectedFilterStatuses.length is 0, it means "select all" (no filter applied)
     if (selectedFilterStatuses.length > 0) {
         if (!selectedFilterStatuses.includes(t.status)) return false;
     }
@@ -514,12 +505,21 @@ function renderTaskItems(container, tasksToRender) {
       el.classList.remove('selected-task-item'); // Ensure it's removed if not selected
     }
 
-    el.addEventListener('click', () => {
+    el.addEventListener('click', async () => { // Made async to await loadTaskFromServer
       // Update the currentSelectedTaskId and re-render the task list
-      // This will ensure the previous selection is un-styled and the new one is styled.
       currentSelectedTaskId = t.id;
-      // Fetch the full task from the server before opening the editor/viewer
-      if (openTaskEditorCallback) openTaskEditorCallback(t); // Pass the partial task, callback will handle full load
+      
+      let fullTask = t;
+      // Only attempt to load if it has a creator and missing full details
+      if (t.creator && (!t.description || !t.notes || !t.attachments)) {
+          fullTask = await loadTaskFromServer(t.id, t.creator) || t; // Fallback to partial if load fails
+      }
+
+      // When an existing task is clicked, open the viewer
+      if (openTaskViewerFn) { // Use the dedicated viewer function
+          openTaskViewerFn(fullTask, false); // Pass false for isNewTask
+      }
+      renderTaskList(); // Re-render task list to update selection highlight
     });
     console.log(container)
     container.appendChild(node);

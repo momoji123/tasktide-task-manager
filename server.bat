@@ -1,3 +1,3 @@
-py -m http.server 12345
+py server.py
 
 pause
