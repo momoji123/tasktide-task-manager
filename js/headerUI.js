@@ -298,6 +298,29 @@ async function manageList(type, title, renderFilterCategoriesMultiSelectCallback
 }
 
 /**
+ * Validates a path segment for security.
+ * Prevents directory traversal attempts.
+ * @param {string} segment - The path segment to validate (e.g., username, task ID).
+ * @returns {boolean} True if the segment is safe, false otherwise.
+ */
+function isValidPathSegment(segment) {
+  // Disallow empty strings
+  if (!segment) {
+    return false;
+  }
+  // Check for directory traversal patterns
+  if (segment.includes('..') || segment.includes('/') || segment.includes('\\')) {
+    return false;
+  }
+  // Disallow segments starting with a dot (e.g., .hidden_file, .git)
+  if (segment.startsWith('.')) {
+    return false;
+  }
+  return true;
+}
+
+
+/**
  * Manages the username setting through a modal.
  * @param {function} onUpdateUsernameCallback - Callback to update the username in the main UI module.
  */
@@ -339,15 +362,22 @@ async function manageUsername(onUpdateUsernameCallback) {
 
     saveBtn.onclick = async () => {
       const newUsername = usernameInput.value.trim();
-      if (newUsername) {
-        await DB.putMeta('username', newUsername); // Save username to IndexedDB
-        username = newUsername; // Update local state
-        if (onUpdateUsernameCallback) onUpdateUsernameCallback(newUsername); // Update global UI state
-        showModalAlert('Username saved successfully!');
-        cleanupAndResolve(true);
-      } else {
+
+      // 🔒 SECURITY: Client-side validation for username
+      if (!newUsername) {
         showModalAlert('Username cannot be empty. Please enter a valid username.');
+        return;
       }
+      if (!isValidPathSegment(newUsername)) {
+        showModalAlert('Invalid username. It cannot contain ".." or path separators like "/" or "\\", and cannot start with a ".".');
+        return;
+      }
+
+      await DB.putMeta('username', newUsername); // Save username to IndexedDB
+      username = newUsername; // Update local state
+      if (onUpdateUsernameCallback) onUpdateUsernameCallback(newUsername); // Update global UI state
+      showModalAlert('Username saved successfully!');
+      cleanupAndResolve(true);
     };
     cancelBtn.onclick = () => cleanupAndResolve(false);
     closeBtn.onclick = () => cleanupAndResolve(false);
