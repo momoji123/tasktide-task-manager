@@ -69,8 +69,7 @@ export async function openMilestonesView(taskId, taskTitle) {
   const addMilestoneBtn = milestonesPage.querySelector(selectors.addMilestoneBtn);
   addMilestoneBtn?.addEventListener('click', async () => {
     const newMilestone = createEmptyMilestone(taskId);
-    await DB.putMilestone(newMilestone); // Save the new milestone
-    // Now that milestone is saved, open editor and re-render graph
+    // open editor and re-render graph
     if (openMilestoneEditorCallback) {
       openMilestoneEditorCallback(newMilestone, taskId);
     }
