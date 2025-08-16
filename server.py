@@ -56,7 +56,7 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
             username = path_segments[1]
             task_id = path_segments[2]
             
-            # 🔒 SECURITY: Validate username and task_id
+            # SECURITY: Validate username and task_id
             if not self._is_safe_path(username) or not self._is_safe_path(task_id):
                 self._send_response(400, "application/json", json.dumps({"error": "Invalid username or task ID. Path segments cannot contain '..', '.' or path separators."}))
                 return
@@ -86,7 +86,7 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
             task_id = path_segments[2]
             milestone_id = path_segments[3]
             
-            # 🔒 SECURITY: Validate username, task_id, and milestone_id
+            # SECURITY: Validate username, task_id, and milestone_id
             if not self._is_safe_path(username) or not self._is_safe_path(task_id) or not self._is_safe_path(milestone_id):
                 self._send_response(400, "application/json", json.dumps({"error": "Invalid username, task ID, or milestone ID. Path segments cannot contain '..', '.' or path separators."}))
                 return
@@ -122,7 +122,7 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
             username = path_segments[1]
             task_id = path_segments[2]
             
-            # 🔒 SECURITY: Validate username and task_id
+            # SECURITY: Validate username and task_id
             if not self._is_safe_path(username) or not self._is_safe_path(task_id):
                 self._send_response(400, "application/json", json.dumps({"error": "Invalid username or task ID. Path segments cannot contain '..', '.' or path separators."}))
                 return
@@ -146,7 +146,7 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
             username = path_segments[1]
             task_id = path_segments[2]
             
-            # 🔒 SECURITY: Validate username and task_id
+            # SECURITY: Validate username and task_id
             if not self._is_safe_path(username) or not self._is_safe_path(task_id):
                 self._send_response(400, "application/json", json.dumps({"error": "Invalid username or task ID. Path segments cannot contain '..', '.' or path separators."}))
                 return
@@ -170,6 +170,31 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
             else:
                 self._send_response(200, "application/json", json.dumps([]).encode('utf-8')) 
 
+        # New: Load Single Milestone: /load-milestone/<username>/<task-id>/<milestone-id>
+        elif len(path_segments) == 4 and path_segments[0] == "load-milestone":
+            username = path_segments[1]
+            task_id = path_segments[2]
+            milestone_id = path_segments[3]
+
+            # SECURITY: Validate path segments
+            if not self._is_safe_path(username) or not self._is_safe_path(task_id) or not self._is_safe_path(milestone_id):
+                self._send_response(400, "application/json", json.dumps({"error": "Invalid username, task ID, or milestone ID. Path segments cannot contain '..', '.' or path separators."}).encode('utf-8'))
+                return
+
+            milestone_file_path = os.path.join(DATA_DIR, username, task_id, f"{milestone_id}.json")
+
+            if os.path.exists(milestone_file_path):
+                try:
+                    with open(milestone_file_path, 'r', encoding='utf-8') as f:
+                        milestone_data = json.load(f)
+                    self._send_response(200, "application/json", json.dumps(milestone_data, indent=4).encode('utf-8'))
+                except json.JSONDecodeError:
+                    self._send_response(500, "application/json", json.dumps({"error": "Stored milestone file is corrupted (invalid JSON)."}).encode('utf-8'))
+                except Exception as e:
+                    self._send_response(500, "application/json", json.dumps({"error": f"Server error: {e}"}).encode('utf-8'))
+            else:
+                self._send_response(404, "application/json", json.dumps({"error": f"Milestone '{milestone_id}' for task '{task_id}' by user '{username}' not found."}).encode('utf-8'))
+        
         else:
             # For all other GET requests, serve static files as before
             super().do_GET()
@@ -184,7 +209,7 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
             username = path_segments[1]
             task_id = path_segments[2]
             
-            # 🔒 SECURITY: Validate username and task_id
+            # SECURITY: Validate username and task_id
             if not self._is_safe_path(username) or not self._is_safe_path(task_id):
                 self._send_response(400, "application/json", json.dumps({"error": "Invalid username or task ID. Path segments cannot contain '..', '.' or path separators."}))
                 return
@@ -206,7 +231,7 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
             task_id = path_segments[2]
             milestone_id = path_segments[3]
             
-            # 🔒 SECURITY: Validate username, task_id, and milestone_id
+            # SECURITY: Validate username, task_id, and milestone_id
             if not self._is_safe_path(username) or not self._is_safe_path(task_id) or not self._is_safe_path(milestone_id):
                 self._send_response(400, "application/json", json.dumps({"error": "Invalid username, task ID, or milestone ID. Path segments cannot contain '..', '.' or path separators."}))
                 return
@@ -225,7 +250,7 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
             self._send_response(404, "application/json", json.dumps({"error": "Endpoint not found."}))
 
 # Create the server using ThreadingTCPServer for concurrent requests.
-with socketserver.ThreadingTCPServer(("", PORT), SimpleTaskServerHandler) as httpd:
+with socketserver.ThreadingTCPServer(("localhost", PORT), SimpleTaskServerHandler) as httpd:
     os.chdir(".")
     print(f"Serving HTTP on port {PORT}")
     print(f"Access static files at: http://localhost:{PORT}/")
@@ -234,6 +259,7 @@ with socketserver.ThreadingTCPServer(("", PORT), SimpleTaskServerHandler) as htt
     print(f"To save a milestone: PUT request to http://localhost:{PORT}/save-milestone/<username>/<task-id>/<milestone-id> with JSON body")
     print(f"To load a task: GET request to http://localhost:{PORT}/load-task/<username>/<task-id>")
     print(f"To load milestones: GET request to http://localhost:{PORT}/load-milestones/<username>/<task-id>")
+    print(f"To load a single milestone: GET request to http://localhost:{PORT}/load-milestone/<username>/<task-id>/<milestone-id>")
     print(f"To delete a task (and its folder): DELETE request to http://localhost:{PORT}/delete-task/<username>/<task-id>")
     print(f"To delete a milestone: DELETE request to http://localhost:{PORT}/delete-milestone/<username>/<task-id>/<milestone-id>")
 

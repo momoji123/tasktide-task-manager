@@ -121,6 +121,27 @@ export async function saveMilestoneToServer(milestone, taskId, username) {
 }
 
 /**
+ * Loads a single milestone's full details (including notes) from the server.
+ * @param {string} username - The username (creator) of the task.
+ * @param {string} taskId - The ID of the parent task.
+ * @param {string} milestoneId - The ID of the milestone to load.
+ * @returns {Promise<object|null>} The full milestone object or null if not found/error.
+ */
+export async function loadMilestoneFromServer(username, taskId, milestoneId) {
+    if (!username || !taskId || !milestoneId) {
+        console.error('API Error: Missing parameters for loading milestone from server.');
+        return null;
+    }
+    try {
+        const response = await fetch(`${API_BASE_URL}/load-milestone/${username}/${taskId}/${milestoneId}`);
+        return await handleApiResponse(response);
+    } catch (error) {
+        console.error(`Failed to load milestone '${milestoneId}' from server:`, error);
+        return null;
+    }
+}
+
+/**
  * Deletes milestone data from the Python server.
  * @param {string} milestoneId - The ID of the milestone to delete.
  * @param {string} taskId - The ID of the parent task.

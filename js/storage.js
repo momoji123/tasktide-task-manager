@@ -144,7 +144,11 @@ export const DB = (function(){
     return new Promise((resolve,reject)=>{
       const tx = connection.transaction([STORE_MILESTONES],'readwrite');
       const store = tx.objectStore(STORE_MILESTONES);
-      store.put(milestone);
+
+      const milestoneForIndexedDB = { ...milestone };
+      delete milestoneForIndexedDB.notes;
+      store.put(milestoneForIndexedDB);
+      
       tx.oncomplete = ()=>resolve(milestone);
       tx.onerror = e => reject(e.target.error);
     });

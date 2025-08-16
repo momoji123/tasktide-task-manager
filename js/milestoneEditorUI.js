@@ -5,7 +5,7 @@
 import { DB } from './storage.js';
 import { Editor } from './editor.js'; // Assuming Editor is a separate module
 import { escapeHtml, showModalAlert, showModalAlertConfirm } from './utilUI.js';
-import { saveMilestoneToServer, deleteMilestoneFromServer } from './apiService.js'; // Import from centralized API service
+import { saveMilestoneToServer, deleteMilestoneFromServer, loadMilestoneFromServer } from './apiService.js'; // Import from centralized API service
 
 // Internal state for global options and callbacks
 let statuses = [];
@@ -82,7 +82,7 @@ function updateButtonStates(editorArea) {
   const deleteBtn = editorArea.querySelector(selectors.deleteMilestoneBtn);
 
   // Buttons are enabled only if a username is set AND the task's creator matches
-  const canEditOrDelete = !!(currentUsername); // Added !! to ensure boolean
+  const canEditOrDelete = !!(currentUsername && taskCreator === currentUsername); // Ensure the current user is the task creator
 
   if (saveBtn) {
     saveBtn.disabled = !canEditOrDelete;
@@ -104,11 +104,10 @@ function updateButtonStates(editorArea) {
 
 /**
  * Opens the milestone editor for a given milestone.
- * @param {object} milestone - The milestone object to edit.
+ * @param {object} milestoneData - The milestone object (might be partial from IndexedDB).
  * @param {string} taskId - The ID of the parent task.
  */
-export async function openMilestoneEditor(milestone, taskId) {
-  currentMilestone = milestone; // Set the currently selected milestone
+export async function openMilestoneEditor(milestoneData, taskId) {
   currentTaskId = taskId; // Store the task ID
 
   // Fetch the parent task to get its creator
@@ -120,7 +119,21 @@ export async function openMilestoneEditor(milestone, taskId) {
   }
   taskCreator = parentTask.creator; // Store the creator of the parent task
 
-  if (updateCurrentMilestoneCallback) updateCurrentMilestoneCallback(milestone); // Inform graph UI
+  // Fetch the full milestone data from the server to ensure notes are present
+  let fullMilestone = null;
+  if (currentUsername && taskId && milestoneData.id) {
+      fullMilestone = await loadMilestoneFromServer(currentUsername, taskId, milestoneData.id);
+  }
+
+  // If fetching from server fails or returns null, fallback to the provided milestoneData
+  // However, for notes, we strictly rely on server data as IndexedDB does not store them.
+  if (!fullMilestone) {
+      showModalAlert('Failed to load full milestone details from server. Notes may not be available.');
+      fullMilestone = { ...milestoneData, notes: '' }; // Fallback, but clear notes if server fetch failed
+  }
+  currentMilestone = fullMilestone; // Set the currently selected milestone to the full server version
+
+  if (updateCurrentMilestoneCallback) updateCurrentMilestoneCallback(currentMilestone); // Inform graph UI
 
   const milestoneEditorArea = document.querySelector(selectors.milestoneEditorArea);
   if (!milestoneEditorArea) return;
@@ -141,14 +154,14 @@ export async function openMilestoneEditor(milestone, taskId) {
   const node = tmpl.cloneNode(true);
   milestoneEditorArea.appendChild(node);
 
-  // Populate inputs
-  milestoneEditorArea.querySelector(selectors.milestoneTitleInput).value = escapeHtml(milestone.title);
-  milestoneEditorArea.querySelector(selectors.milestoneDeadlineInput).value = milestone.deadline ? milestone.deadline.split('T')[0] : '';
-  milestoneEditorArea.querySelector(selectors.milestoneFinishDateInput).value = milestone.finishDate ? milestone.finishDate.split('T')[0] : '';
+  // Populate inputs with data from the fullMilestone object
+  milestoneEditorArea.querySelector(selectors.milestoneTitleInput).value = escapeHtml(currentMilestone.title);
+  milestoneEditorArea.querySelector(selectors.milestoneDeadlineInput).value = currentMilestone.deadline ? currentMilestone.deadline.split('T')[0] : '';
+  milestoneEditorArea.querySelector(selectors.milestoneFinishDateInput).value = currentMilestone.finishDate ? currentMilestone.finishDate.split('T')[0] : '';
 
   // Populate status dropdown
   const statusSelect = milestoneEditorArea.querySelector(selectors.milestoneStatusSelect);
-  renderStatusSelectOptions(milestoneEditorArea, statuses, milestone.status);
+  renderStatusSelectOptions(milestoneEditorArea, statuses, currentMilestone.status);
 
   // Populate parent milestone dropdown
   // Fetch milestones directly from the server for this task
@@ -156,14 +169,15 @@ export async function openMilestoneEditor(milestone, taskId) {
   const parentSelect = milestoneEditorArea.querySelector(selectors.milestoneParentSelect);
   parentSelect.innerHTML = '<option value="">-- No Parent Milestone --</option>' + 
                            allMilestones
-                             .filter(m => m.id !== milestone.id) // Cannot be its own parent
-                             .map(m => `<option value="${escapeHtml(m.id)}" ${m.id === milestone.parentId ? 'selected' : ''}>${escapeHtml(m.title)}</option>`)
+                             .filter(m => m.id !== currentMilestone.id) // Cannot be its own parent
+                             .map(m => `<option value="${escapeHtml(m.id)}" ${m.id === currentMilestone.parentId ? 'selected' : ''}>${escapeHtml(m.title)}</option>`)
                              .join('');
 
 
   // Initialize Editor for notes and store its instance
   notesEditorInstance = Editor.init(milestoneEditorArea.querySelector(selectors.milestoneNotesEditor));
-  milestoneEditorArea.querySelector(selectors.milestoneNotesEditor + ' .text-area').innerHTML = milestone.notes;
+  // Set the notes content from the fullMilestone object
+  milestoneEditorArea.querySelector(selectors.milestoneNotesEditor + ' .text-area').innerHTML = currentMilestone.notes || ''; // Ensure it's not undefined
 
   // Add event listeners
   milestoneEditorArea.querySelector(selectors.saveMilestoneBtn)?.addEventListener('click', saveMilestone);
@@ -172,7 +186,7 @@ export async function openMilestoneEditor(milestone, taskId) {
 
   // Deselect all bubbles then select the current one in the graph
   document.querySelectorAll('.milestone-bubble').forEach(b => b.classList.remove('selected'));
-  const selectedBubble = document.querySelector(`.milestone-bubble[data-milestone-id="${milestone.id}"]`);
+  const selectedBubble = document.querySelector(`.milestone-bubble[data-milestone-id="${currentMilestone.id}"]`);
   if (selectedBubble) {
     selectedBubble.classList.add('selected');
     // Scroll to the selected bubble if it's not fully in view
@@ -205,8 +219,8 @@ async function saveMilestone() {
   if (!currentMilestone || !currentTaskId) return;
 
   // Enforce username requirement and creator match
-  if (!currentUsername) {
-      showModalAlert('Please set your username in Settings');
+  if (!currentUsername || taskCreator !== currentUsername) {
+      showModalAlert('You can only save milestones for tasks you created. Please set your username in Settings or select a task you created.');
       return;
   }
 
@@ -221,9 +235,9 @@ async function saveMilestone() {
   currentMilestone.notes = (notesEditorInstance) ? notesEditorInstance.getHTML() : '';
   currentMilestone.updatedAt = new Date().toISOString();
 
-  await DB.putMilestone(currentMilestone); // Save to IndexedDB
+  await DB.putMilestone(currentMilestone); // Save to IndexedDB (notes excluded here, by design in DB module)
   try {
-    await saveMilestoneToServer(currentMilestone, currentTaskId, taskCreator); // Use centralized API service
+    await saveMilestoneToServer(currentMilestone, currentTaskId, taskCreator); // Use centralized API service to save full milestone including notes
     showModalAlert('Milestone saved!');
   } catch (error) {
     showModalAlert(`Error saving milestone: ${error.message}`);
@@ -237,7 +251,7 @@ async function saveMilestone() {
         renderMilestoneBubblesCallback(currentTaskId, milestonesGraphContainer);
     }
   }
-  // Re-open editor to ensure dropdowns are re-rendered if global lists change
+  // Re-open editor to ensure dropdowns are re-rendered if global lists change and notes are re-fetched
   openMilestoneEditor(currentMilestone, currentTaskId);
 }
 
