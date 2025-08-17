@@ -19,6 +19,10 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
   grid-template-columns: 340px 360px 1fr; /* sidebar, filter-column (expanded), main */
 }
 
+.editor-area{
+  margin-top: 20px;
+}
+
 /* Mobile-first adjustments for small screens */
 @media (max-width: 768px) {
   .app {
@@ -56,9 +60,10 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
     height: 100%; /* Take full screen height */
     z-index: 101; /* Ensure it's on top of sidebar when active */
     background: linear-gradient(180deg,#eef2ff 0%,var(--bg) 100%); /* Match app background */
-    padding-top: 60px; /* Make space for the fixed header */
     transform: translateX(100%); /* Initially hidden off-screen to the right */
     transition: transform 0.3s ease-in-out;
+    /* Apply padding-top for fixed header only on mobile, as .main itself is fixed */
+    padding-top: 65px;
   }
 
   .app.editor-active .main,
@@ -79,6 +84,10 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
     padding: 10px 20px;
     z-index: 102; /* Ensure header is above everything */
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  }
+
+  .editor-area{
+    margin-top: 70px; /* Increased margin to safely clear the fixed header */
   }
 
   .editor-area .editor,
@@ -162,7 +171,7 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 /* When the filter is active, apply these styles */
 .app.filter-active .filter-column {
     padding:18px; /* Apply padding when active */
-    border-right: 1px solid #eef2ff; /* Apply border when active */
+    border-right: 1px solid #eef2f7; /* Apply border when active */
     overflow-y: auto; /* Allow scrolling when active */
 }
 
@@ -194,8 +203,8 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 .task-item .title{font-weight:600}
 .task-item .meta{font-size:12px;color:var(--muted)}
 .main{
-  flex:1; /* This is no longer flex-based here, but good to keep */
-  padding:20px;
+  flex:1;
+  padding:20px; /* Keep standard padding for .main */
   display:flex;
   flex-direction:column;
 }
@@ -214,7 +223,8 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
   flex-wrap: wrap; /* Allow buttons to wrap */
 }
 .header-actions button{margin-left:0; /* Remove specific margin to use flex gap */padding:6px 10px;border-radius:8px;border:1px solid #e7eaf2;background:#fff}
-.editor-area{margin-top:14px;flex:1;background:var(--card);border-radius:12px;padding:16px;overflow:auto; box-shadow: 0 4px 12px rgba(0,0,0,0.08);} /* Added box-shadow */
+.editor-area{
+  flex:1;background:var(--card);border-radius:12px;padding:16px;overflow:auto; box-shadow: 0 4px 12px rgba(0,0,0,0.08);} /* Added box-shadow */
 .placeholder{color:var(--muted); text-align: center; padding: 50px 0; font-size: 1.2em;} /* Centered placeholder text */
 
 /* Editor layout */
@@ -271,7 +281,7 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
   border-color: var(--accent);
 }
 .editor button#saveBtn:hover {
-  background: #206bbd; /* Darker accent on hover */
+  background: #206bbd;
   border-color: #206bbd;
 }
 .editor button#deleteBtn {
@@ -280,7 +290,7 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
   border-color: var(--danger);
 }
 .editor button#deleteBtn:hover {
-  background: #c0392b; /* Darker danger on hover */
+  background: #c0392b;
   border-color: #c0392b;
 }
 
@@ -291,7 +301,7 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.6); /* Darker backdrop */
+  background-color: rgba(0, 0, 0, 0.6);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -300,12 +310,12 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 
 .modal-content {
   background-color: white;
-  padding: 25px; /* Increased padding */
-  border-radius: 12px; /* More rounded corners */
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25); /* Stronger shadow */
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
   width: 90%;
-  max-width: 550px; /* Slightly wider max-width */
-  transform: translateY(-20px); /* Slight lift animation */
+  max-width: 550px;
+  transform: translateY(-20px);
   animation: modal-enter 0.3s forwards ease-out;
 }
 
@@ -319,23 +329,23 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid #e7eaf2;
-  padding-bottom: 15px; /* Increased padding */
-  margin-bottom: 15px; /* Increased margin */
+  padding-bottom: 15px;
+  margin-bottom: 15px;
 }
 
 .modal-header h3 {
   margin: 0;
-  font-size: 1.5em; /* Larger header font */
+  font-size: 1.5em;
   color: #333;
 }
 
 .modal-close {
   background: none;
   border: none;
-  font-size: 28px; /* Larger close button */
+  font-size: 28px;
   cursor: pointer;
   line-height: 1;
-  color: #6c7480; /* Muted color */
+  color: #6c7480;
   transition: color 0.2s ease;
 }
 .modal-close:hover {
@@ -344,29 +354,29 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 
 .modal-body textarea {
   width: 100%;
-  min-height: 120px; /* Slightly smaller min-height for modals */
-  border-radius: 8px; /* More rounded corners */
+  min-height: 120px;
+  border-radius: 8px;
   border: 1px solid #e2e6ef;
-  padding: 10px; /* Increased padding */
-  resize: vertical; /* Allow vertical resizing */
+  padding: 10px;
+  resize: vertical;
 }
 
 .modal-body {
-  max-height: 400px; /* Added: Maximum height for modal body */
-  overflow-y: auto; /* Added: Enable vertical scrolling if content overflows */
-  padding-right: 5px; /* Add slight padding for scrollbar */
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 5px;
 }
 
 .modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 10px; /* Increased gap */
-  margin-top: 20px; /* Increased margin */
+  gap: 10px;
+  margin-top: 20px;
 }
 
 .modal-footer button {
-  padding: 10px 18px; /* Increased padding */
-  border-radius: 8px; /* More rounded corners */
+  padding: 10px 18px;
+  border-radius: 8px;
   border: 1px solid #e7eaf2;
   background: #fff;
   cursor: pointer;
@@ -397,12 +407,12 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 .dropdown-content {
   display: none;
   position: absolute;
-  background-color: #fff; /* White background */
-  min-width: 180px; /* Slightly wider */
-  box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.15); /* Slightly softer shadow */
-  z-index: 1001; /* Higher than settings dropdown */
+  background-color: #fff;
+  min-width: 180px;
+  box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.15);
+  z-index: 1001;
   right: 0;
-  border-radius: 8px; /* More rounded */
+  border-radius: 8px;
   overflow: hidden;
   animation: dropdown-fade-in 0.2s ease-out forwards;
 }
@@ -413,8 +423,8 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 }
 
 .dropdown-content button {
-  color: #333; /* Darker text color */
-  padding: 12px 18px; /* Increased padding */
+  color: #333;
+  padding: 12px 18px;
   text-decoration: none;
   display: block;
   width: 100%;
@@ -427,7 +437,7 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 }
 
 .dropdown-content button:hover {
-  background-color: #f6f7fb; /* Light background on hover */
+  background-color: #f6f7fb;
   color: var(--accent);
 }
 
@@ -438,40 +448,40 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 /* Style for the date inputs to make them align nicely */
 .date-inputs {
   display: flex;
-  gap: 12px; /* Increased gap */
+  gap: 12px;
 }
-.date-inputs > div { /* Apply flex to children of date-inputs for vertical label/input */
+.date-inputs > div {
   flex: 1;
   display: flex;
   flex-direction: column;
 }
 .date-inputs input {
-  width: 100%; /* Ensure input fills its container */
+  width: 100%;
 }
 
 /* Style for task item dates to stack or flow */
 .task-item .right .date-info {
-  font-size: 11px; /* Smaller font for dates */
+  font-size: 11px;
   color: var(--muted);
   text-align: right;
   margin-top: 2px;
 }
 .task-item .right .date-info span {
-  display: block; /* Stack dates for clarity in list view */
+  display: block;
 }
 /* Specific styles for filter date ranges to be inline */
 .filter-date-group {
   display: flex;
-  flex-direction: column; /* Stack label and input group */
-  gap: 4px; /* Space between label and inputs */
-  margin-bottom: 8px; /* Space between date groups */
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
 }
 .filter-date-group .date-inputs-inline {
   display: flex;
-  gap: 8px; /* Space between from and to inputs */
+  gap: 8px;
 }
 .filter-date-group .date-inputs-inline input {
-  flex: 1; /* Make inputs take equal space */
+  flex: 1;
 }
 
 /* New styles for multi-select category filter */
@@ -484,18 +494,18 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 10px; /* Increased padding */
-    border-radius: 8px; /* More rounded */
+    padding: 8px 10px;
+    border-radius: 8px;
     border: 1px solid #e2e6ef;
     background-color: white;
     cursor: pointer;
-    min-height: 38px; /* Ensure consistent height */
+    min-height: 38px;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .multi-select-header:hover {
   border-color: #d1d5db;
 }
-.multi-select-header.active { /* Style when dropdown is open */
+.multi-select-header.active {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px rgba(43, 124, 255, 0.2);
 }
@@ -503,15 +513,15 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 .multi-select-header .selected-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px; /* Increased gap */
+    gap: 6px;
     flex-grow: 1;
 }
 
 .multi-select-header .selected-tag {
     background-color: var(--accent);
     color: white;
-    padding: 3px 8px; /* Increased padding */
-    border-radius: 6px; /* More rounded */
+    padding: 3px 8px;
+    border-radius: 6px;
     font-size: 12px;
     display: flex;
     align-items: center;
@@ -523,7 +533,7 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
     border: none;
     color: white;
     cursor: pointer;
-    font-size: 11px; /* Slightly larger close button */
+    font-size: 11px;
     padding: 0;
     line-height: 1;
 }
@@ -534,11 +544,11 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
     background-color: #f9f9f9;
     min-width: 100%;
     box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-    z-index: 1002; /* Higher than settings dropdown */
+    z-index: 1002;
     border-radius: 6px;
     overflow: hidden;
     margin-top: 4px;
-    max-height: 200px; /* Limit height for scroll */
+    max-height: 200px;
     overflow-y: auto;
 }
 
@@ -559,7 +569,7 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 }
 
 .multi-select-dropdown-content .dropdown-item.selected {
-    background-color: #eef2ff; /* Light accent for selected items */
+    background-color: #eef2ff;
     font-weight: 600;
     color: var(--accent);
 }
@@ -590,9 +600,9 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 }
 
 .group-header {
-    display: flex; /* Make it a flex container */
-    justify-content: space-between; /* Space out title and button */
-    align-items: center; /* Vertically align items */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     font-weight: 700;
     margin-top: 15px;
     margin-bottom: 5px;
@@ -600,31 +610,31 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
     border-bottom: 1px solid #e7eaf2;
     color: var(--accent);
     font-size: 1.1em;
-    cursor: pointer; /* Indicate it's clickable */
+    cursor: pointer;
 }
 
 .group-header h4 {
-    margin: 0; /* Remove default margin from h3 */
-    flex-grow: 1; /* Allow h3 to take available space */
+    margin: 0;
+    flex-grow: 1;
 }
 
 .toggle-group-btn {
     background: none;
     border: none;
-    font-size: 1.2em; /* Make arrow a bit bigger */
+    font-size: 1.2em;
     cursor: pointer;
-    color: var(--muted); /* Muted color for the arrow */
-    padding: 0 5px; /* Some padding around the arrow */
+    color: var(--muted);
+    padding: 0 5px;
 }
 
 .group-content {
-    overflow: hidden; /* Hide overflow when collapsed */
-    max-height: 1000px; /* Arbitrarily large max-height for smooth transition */
-    transition: max-height 0.1s ease-out; /* Smooth collapse/expand */
+    overflow: hidden;
+    max-height: 1000px;
+    transition: max-height 0.1s ease-out;
 }
 
 .group-content:not(.show) {
-    max-height: 0; /* Collapse height to 0 */
+    max-height: 0;
 }
 
 /* New styles for Milestones */
@@ -635,11 +645,11 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: var(--bg); /* Use a softer background */
+    background-color: var(--bg);
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 1000; /* Ensure it's on top */
+    z-index: 1000;
 }
 
 .fullscreen-modal-content {
@@ -648,30 +658,30 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
     height: 100%;
     display: flex;
     flex-direction: column;
-    border-radius: 0; /* No rounded corners for full screen */
-    box-shadow: none; /* No shadow for full screen */
+    border-radius: 0;
+    box-shadow: none;
 }
 
 .milestones-view-body-grid {
     display: grid;
-    grid-template-columns: 1fr 2fr; /* Left for graph (1fr), right for editor (2fr) */
+    grid-template-columns: 1fr 2fr;
     gap: 20px;
-    flex-grow: 1; /* Allow body to take available space */
-    overflow: hidden; /* Prevent overall scrollbars on the grid itself */
-    padding: 20px; /* Padding for the entire grid content */
+    flex-grow: 1;
+    overflow: hidden;
+    padding: 20px;
 }
 
 .milestones-view-body-grid.editor-hidden {
-  grid-template-columns: 1fr 0fr; /* Graph takes full width, editor is hidden */
+  grid-template-columns: 1fr 0fr;
 }
 
 .milestones-view-body-grid.editor-hidden .milestone-editor-area {
-    opacity: 0; /* Fade out content */
-    visibility: hidden; /* Hide completely from interaction */
-    width: 0; /* Collapse width */
-    padding: 0; /* Remove padding */
-    margin: 0; /* Remove margin */
-    overflow: hidden; /* Hide overflow */
+    opacity: 0;
+    visibility: hidden;
+    width: 0;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
     transition: opacity 0.3s ease, visibility 0.3s ease, width 0.3s ease, padding 0.3s ease;
 }
 
@@ -682,23 +692,23 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
     border-radius: 8px;
     padding: 16px;
     border: 1px solid #eef2f7;
-    overflow: hidden; /* Hide overflow from the graph container below */
+    overflow: hidden;
 }
 
 .milestone-controls {
     display: flex;
-    justify-content: flex-end; /* Align add button to the right */
+    justify-content: flex-end;
     padding-bottom: 8px;
     margin-bottom: 10px;
     border-bottom: 1px solid #eef2f7;
 }
 
 .milestone-graph-container {
-    flex-grow: 1; /* Allow graph to take available vertical space */
-    overflow-y: auto; /* Enable scrolling for the graph */
-    overflow-x: auto; /* Enable horizontal scrolling for the graph */
-    position: relative; /* Essential for absolute positioning of bubbles and SVG lines */
-    padding: 20px; /* Padding for the graph area */
+    flex-grow: 1;
+    overflow-y: auto;
+    overflow-x: auto;
+    position: relative;
+    padding: 20px;
 }
 
 /* Removed .milestone-level-row as bubbles are now absolutely positioned */
@@ -708,8 +718,8 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
     top: 0;
     left: 0;
     /* width and height will be set dynamically in JS to cover content */
-    pointer-events: none; /* Allow clicks to pass through to bubbles */
-    z-index: 1; /* Below bubbles */
+    pointer-events: none;
+    z-index: 1;
 }
 
 .milestone-connector-line {
@@ -720,15 +730,15 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 .milestone-bubble {
     background-color: var(--card);
     border: 2px solid var(--muted);
-    border-radius: 20px; /* More rounded, pill-like shape */
+    border-radius: 20px;
     padding: 8px 15px;
     text-align: center;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     cursor: pointer;
     transition: all 0.2s ease-in-out;
-    min-width: 150px; /* Minimum width for readability */
-    max-width: 250px; /* Max width to prevent overly long bubbles */
-    z-index: 2; /* Above SVG lines */
+    min-width: 150px;
+    max-width: 250px;
+    z-index: 2;
     /* Position will be set by JS */
     display: flex;
     flex-direction: column;
@@ -749,7 +759,7 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 .milestone-title {
     font-weight: 600;
     color: #333;
-    word-break: break-word; /* Allow long titles to wrap */
+    word-break: break-word;
 }
 
 .milestone-status {
@@ -759,7 +769,7 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
     padding: 2px 6px;
     border-radius: 10px;
     background-color: #f0f2f7;
-    white-space: nowrap; /* Prevent status text from wrapping */
+    white-space: nowrap;
 }
 
 /* Status-specific colors for bubbles */
@@ -767,20 +777,20 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
     border-color: #999;
 }
 .milestone-bubble.status-in-progress {
-    border-color: #f39c12; /* Orange */
+    border-color: #f39c12;
 }
 .milestone-bubble.status-done {
-    border-color: #27ae60; /* Green */
+    border-color: #27ae60;
 }
 
 .milestone-editor-area {
     background: var(--card);
     border-radius: 8px;
     padding: 16px;
-    overflow-y: auto; /* Enable scrolling for editor content if it overflows */
+    overflow-y: auto;
     border: 1px solid #eef2f7;
-    min-height: 250px; /* Ensure editor area has some height */
-    transition: opacity 0.3s ease, visibility 0.3s ease, width 0.3s ease, padding 0.3s ease; /* Ensure transition is applied */
+    min-height: 250px;
+    transition: opacity 0.3s ease, visibility 0.3s ease, width 0.3s ease, padding 0.3s ease;
 }
 
 .milestone-editor-card {
@@ -795,7 +805,7 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 }
 
 .editor .text-area {
-  min-height: 100px; /* Adjusted min-height for notes editor */
+  min-height: 100px;
   border: 1px solid #eef2f7;
   padding: 8px;
   border-radius: 6px;
@@ -803,30 +813,28 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 
 /* New style for selected task item in the list */
 .task-item.selected-task-item {
-    border-color: var(--accent); /* Highlight border */
-    background-color: #eef2ff; /* Light background for selected item */
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Subtle shadow for emphasis */
+    border-color: var(--accent);
+    background-color: #eef2ff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
 /* --- Task Viewer Styles (NEW) --- */
 .viewer {
   display: grid;
-  /* One column for the left content (which itself will be flex/grid), one for aside */
-  grid-template-columns: 1fr 320px; 
-  /* Header, flexible content area (left column + right aside), actions */
-  grid-template-rows: auto 1fr auto; 
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr auto;
   gap: 20px;
-  height: 100%; /* Ensure viewer takes full height of its container */
-  overflow: hidden; /* Prevent overall scrollbars on the viewer itself, child elements will scroll */
+  height: 100%;
+  overflow: hidden;
 }
 
 .viewer-header {
-  grid-column: 1 / -1; /* Spans across both main content columns */
-  grid-row: 1; /* Explicitly place in the first row */
+  grid-column: 1 / -1;
+  grid-row: 1;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
+  margin-bottom: 0;
   padding-bottom: 15px;
   border-bottom: 1px solid #eef2f7;
 }
@@ -837,23 +845,22 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
   font-size: 1.8em;
 }
 
-/* New wrapper for the main content on the left */
+/* New wrapper for the main content, now including categories and attachments */
 .viewer-main-content-column {
-  grid-column: 1 / 2; /* Occupies the first column of the main content row */
-  grid-row: 2; /* Occupies the second row (content area) */
-  display: flex; /* Use flexbox to stack its children */
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
   flex-direction: column;
-  gap: 20px; /* Gap between details, description, notes */
-  overflow-y: auto; /* Allow this column to scroll independently if its content overflows */
-  padding-right: 10px; /* Add some padding for the scrollbar if it appears */
+  gap: 20px;
+  overflow-y: auto;
+  padding-right: 10px;
 }
 
 .viewer-details {
-  /* No grid-column/grid-row needed here, handled by parent viewer-main-content-column */
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); /* Responsive grid for details */
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 15px;
-  margin-bottom: 0; /* No margin-bottom, gap handled by parent flex */
+  margin-bottom: 0;
   border-bottom: 1px solid #eef2f7;
   padding-bottom: 20px;
 }
@@ -876,8 +883,7 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 }
 
 .viewer-section {
-  /* No grid-column/grid-row needed here, handled by parent viewer-main-content-column */
-  margin-bottom: 0; /* No margin-bottom, gap handled by parent flex */
+  margin-bottom: 0;
 }
 
 .viewer-content {
@@ -888,22 +894,21 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
   min-height: 100px;
   color: #444;
   line-height: 1.6;
-  overflow: auto; /* Enable scrolling for rich text content */
+  overflow: auto;
 }
-.viewer-content img { /* Style images within rich text */
+.viewer-content img {
   max-width: 100%;
   height: auto;
   border-radius: 6px;
   margin: 10px 0;
 }
-.viewer-content a { /* Style links within rich text */
+.viewer-content a {
   color: var(--accent);
   text-decoration: underline;
 }
 
-.viewer-aside {
-  grid-column: 2 / -1; /* Occupies the second column (the rightmost) */
-  grid-row: 2; /* Occupies the second row (content area) */
+/* New class for the categories and attachments section at the bottom of the main content column */
+.viewer-aside-bottom {
   background: var(--card);
   border-radius: 8px;
   padding: 12px;
@@ -911,13 +916,17 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
   display: flex;
   flex-direction: column;
   gap: 15px;
-  align-self: flex-start; /* Stick to the top of its grid cell */
-  overflow-y: auto; /* Allow this column to scroll independently */
+  margin-top: 10px;
+}
+
+/* Original viewer-aside is now removed as its content has moved */
+.viewer-aside {
+  display: none;
 }
 
 .viewer-actions {
-  grid-column: 1 / -1; /* Spans both main content columns at the bottom */
-  grid-row: 3; /* Explicitly place in the third row */
+  grid-column: 1 / -1;
+  grid-row: 3;
   display: flex;
   justify-content: flex-start;
   gap: 10px;
@@ -943,11 +952,11 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 
 /* Ensure editor (edit mode) is hidden by default */
 .editor-area .editor {
-  display: none; /* Hidden by default */
+  display: none;
 }
 /* Ensure viewer (view mode) is hidden by default */
 .editor-area #viewerArea {
-  display: none; /* Hidden by default */
+  display: none;
 }
 
 /* When a task is selected, either viewer or editor will be shown */
