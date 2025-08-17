@@ -9,6 +9,7 @@ import { loadTaskFromServer } from './apiService.js'; // Import from centralized
 let currentTask = null;
 let openTaskEditorCallback = null; // Callback to open the task editor
 let openMilestonesViewCallback = null; // Callback to open the milestone view
+let closeViewerCallback = null; // Callback to close the viewer (for mobile UX)
 
 const selectors = {
   viewerArea: '#viewerArea',
@@ -24,16 +25,20 @@ const selectors = {
   viewAttachmentsList: '#viewAttachments',
   editTaskBtn: '#editTaskBtn',
   viewMilestonesBtn: '#viewMilestonesBtn',
+  closeViewerBtn: '#closeTaskViewerBtn', // New selector for the close button
+  appContainer: '#app', // Added for mobile UX
 };
 
 /**
  * Initializes the Task Viewer module.
  * @param {function} onOpenTaskEditor - Callback to open the task editor for editing.
  * @param {function} onOpenMilestonesView - Callback to open the milestone view for a task.
+ * @param {function} onCloseViewer - Callback to close the viewer (for mobile UX)
  */
-export function initTaskViewerUI(onOpenTaskEditor, onOpenMilestonesView) {
+export function initTaskViewerUI(onOpenTaskEditor, onOpenMilestonesView, onCloseViewer) {
   openTaskEditorCallback = onOpenTaskEditor;
   openMilestonesViewCallback = onOpenMilestonesView;
+  closeViewerCallback = onCloseViewer; // Initialize new callback
   // The event listeners for edit/view milestones will now be attached
   // directly to the buttons *after* they are rendered in openTaskViewer.
   // This ensures they are always active when the viewer content is updated.
@@ -100,6 +105,21 @@ export async function openTaskViewer(task, isNewTask = false) {
     }
   });
 
+  // Attach event listener for the new close button and place it beside the edit button
+  const viewerHeader = viewerArea.querySelector('.viewer-header');
+  const editTaskBtn = viewerArea.querySelector(selectors.editTaskBtn);
+  if (viewerHeader && editTaskBtn) {
+      const closeBtn = document.createElement('button');
+      closeBtn.id = selectors.closeViewerBtn.substring(1); // Remove '#' from selector
+      closeBtn.className = 'simple-close-btn'; // Use the new simple class
+      closeBtn.textContent = 'Close';
+      closeBtn.addEventListener('click', () => {
+          if (closeViewerCallback) closeViewerCallback();
+      });
+      // Insert the close button right after the edit task button
+      editTaskBtn.parentNode.insertBefore(closeBtn, editTaskBtn.nextSibling);
+  }
+
   // Show the viewer and hide the editor
   viewerArea.style.display = 'grid'; // Use grid for viewer layout
 
@@ -113,6 +133,13 @@ export async function openTaskViewer(task, isNewTask = false) {
   }
   if (placeholderElement) {
     placeholderElement.style.display = 'none';
+  }
+
+  // On mobile, show the main content (viewer) and hide the sidebar
+  const appContainer = document.querySelector(selectors.appContainer);
+  if (window.innerWidth <= 768) {
+    appContainer.classList.remove('sidebar-active', 'editor-active');
+    appContainer.classList.add('viewer-active');
   }
 }
 
@@ -157,5 +184,35 @@ function renderAttachments(){
     el.style.color = 'var(--muted)';
   } else {
     el.style.color = 'inherit';
+  }
+}
+
+/**
+ * Clears the viewer area and shows the placeholder.
+ * This is useful when no task is selected or a task is deleted.
+ */
+export function clearViewerArea() {
+  const viewerElement = document.querySelector(selectors.viewerArea);
+  const editorElement = document.querySelector('#editorArea .editor');
+  const placeholderElement = document.querySelector('#editorArea .placeholder');
+
+  if (viewerElement) {
+    viewerElement.style.display = 'none';
+  }
+  if (editorElement) {
+    editorElement.style.display = 'none';
+  }
+  if (placeholderElement) {
+    placeholderElement.style.display = 'block';
+  } else {
+    document.querySelector('#editorArea').innerHTML = '<div class="placeholder">Select or create a task to view/edit details</div>';
+  }
+  currentTask = null;
+
+  // On mobile, if editor/viewer is closed, ensure sidebar is shown
+  const appContainer = document.querySelector(selectors.appContainer);
+  if (window.innerWidth <= 768) {
+    appContainer.classList.remove('editor-active', 'viewer-active');
+    appContainer.classList.add('sidebar-active'); // Show sidebar
   }
 }

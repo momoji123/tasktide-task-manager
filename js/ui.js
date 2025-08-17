@@ -58,6 +58,17 @@ export const UI = (function() {
         LeftMenuTaskUI.renderTaskList();
     };
 
+    // Define the close callbacks here, to be passed to relevant modules
+    // These functions will be responsible for hiding the editor/viewer and showing the left menu
+    const closeEditor = () => {
+      TaskEditorUI.clearEditorArea(); // This also handles showing left menu on mobile
+    };
+
+    const closeViewer = () => {
+      TaskViewerUI.clearViewerArea(); // This also handles showing left menu on mobile
+    };
+
+
     // 3. Initialize individual UI components, passing necessary state and callbacks
     // Callbacks are crucial for inter-component communication without direct coupling.
 
@@ -80,11 +91,13 @@ export const UI = (function() {
 
     // TaskEditorUI needs: initial state, and callbacks to re-render task list, open milestone view, and open task viewer
     // TaskEditorUI now gets a callback to open the viewer after saving a task
-    TaskEditorUI.initTaskEditorUI(commonState, LeftMenuTaskUI.renderTaskList, MilestoneGraphUI.openMilestonesView, TaskViewerUI.openTaskViewer);
+    // Pass the new closeEditor callback here
+    TaskEditorUI.initTaskEditorUI(commonState, LeftMenuTaskUI.renderTaskList, MilestoneGraphUI.openMilestonesView, TaskViewerUI.openTaskViewer, closeEditor); // MODIFIED
 
     // TaskViewerUI needs: callback to open the task editor
     // TaskViewerUI also needs a callback to open milestone view
-    TaskViewerUI.initTaskViewerUI(TaskEditorUI.openTaskEditor, MilestoneGraphUI.openMilestonesView);
+    // Pass the new closeViewer callback here
+    TaskViewerUI.initTaskViewerUI(TaskEditorUI.openTaskEditor, MilestoneGraphUI.openMilestonesView, closeViewer); // MODIFIED
 
     // MilestoneGraphUI needs: callback to open the milestone editor
     MilestoneGraphUI.initMilestoneGraphUI(MilestoneEditorUI.openMilestoneEditor);
@@ -97,3 +110,4 @@ export const UI = (function() {
   // Expose init function
   return { init };
 })();
+

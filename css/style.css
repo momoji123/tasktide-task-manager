@@ -19,6 +19,113 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
   grid-template-columns: 340px 360px 1fr; /* sidebar, filter-column (expanded), main */
 }
 
+/* Mobile-first adjustments for small screens */
+@media (max-width: 768px) {
+  .app {
+    grid-template-columns: 1fr; /* Single column layout for mobile */
+    /* Adjust grid template rows for mobile: header, main content area, then sidebar/filter */
+    grid-template-rows: auto 1fr;
+  }
+
+  .sidebar {
+    grid-column: 1 / -1; /* Sidebar takes full width */
+    grid-row: 2; /* Sidebar is initially in the second row (content area) */
+    position: fixed; /* Make sidebar fixed to cover content */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%; /* Take full screen height */
+    z-index: 100; /* Ensure it's on top */
+    transform: translateX(0); /* Initially visible */
+    transition: transform 0.3s ease-in-out;
+    padding-top: 60px; /* Make space for the fixed header */
+  }
+
+  .app.editor-active .sidebar,
+  .app.viewer-active .sidebar {
+    transform: translateX(-100%); /* Hide sidebar when editor/viewer is active */
+  }
+
+  .main {
+    grid-column: 1 / -1; /* Main content takes full width */
+    grid-row: 2; /* Main content is also in the second row, but hidden by default */
+    position: fixed; /* Make main content fixed to cover content */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%; /* Take full screen height */
+    z-index: 101; /* Ensure it's on top of sidebar when active */
+    background: linear-gradient(180deg,#eef2ff 0%,var(--bg) 100%); /* Match app background */
+    padding-top: 60px; /* Make space for the fixed header */
+    transform: translateX(100%); /* Initially hidden off-screen to the right */
+    transition: transform 0.3s ease-in-out;
+  }
+
+  .app.editor-active .main,
+  .app.viewer-active .main {
+    transform: translateX(0); /* Show main content when editor/viewer is active */
+  }
+
+  .filter-column {
+    display: none; /* Hide filter column on mobile */
+  }
+
+  .main-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: var(--card); /* Background for header */
+    padding: 10px 20px;
+    z-index: 102; /* Ensure header is above everything */
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  }
+
+  .editor-area .editor,
+  .editor-area #viewerArea {
+    padding-bottom: 20px; /* Add some padding at the bottom of the editor/viewer */
+  }
+
+  /* Adjust viewer header for mobile to make space for close button */
+  .viewer-header {
+    position: relative; /* Allow absolute positioning of close button */
+    padding-right: 50px; /* Make space for the close button */
+  }
+
+  /* Adjust editor header for mobile to make space for close button */
+  .milestone-editor-card .modal-header {
+    position: relative;
+    padding-right: 50px; /* Make space for the close button */
+  }
+
+  /* Ensure action buttons in viewer/editor are visible */
+  .viewer-actions, .editor button {
+    margin-top: 10px;
+  }
+}
+
+/* New: Make headers relative for absolutely positioned close buttons */
+.viewer-header,
+.milestone-editor-card .modal-header,
+.editor .modal-header { /* Applied to dynamically added editor header */
+  position: relative;
+}
+
+/* New: Style for simple close buttons */
+.simple-close-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  line-height: 1;
+  color: var(--muted); /* Muted color */
+  padding: 0 8px; /* Add some padding */
+  transition: color 0.2s ease;
+}
+.simple-close-btn:hover {
+  color: #333;
+}
+
+
 .sidebar{
   padding:18px;
   background:var(--card);
@@ -97,9 +204,9 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
   justify-content:space-between;
   align-items:center;
   /* Added gap for better spacing in the header */
-  gap: 15px; 
+  gap: 15px;
   /* Allow header items to wrap on smaller screens if needed */
-  flex-wrap: wrap; 
+  flex-wrap: wrap;
 }
 .header-actions{
   display: flex;

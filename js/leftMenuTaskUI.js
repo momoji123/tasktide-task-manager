@@ -46,6 +46,8 @@ const selectors = {
   toggleFilterBtn: '#toggleFilterBtn',
   filterSection: '#filterSection',
   filterColumn: '#filterColumn',
+  appContainer: '#app', // Added for mobile UX
+  sidebar: '.sidebar', // Added for mobile UX
 };
 
 /**
@@ -67,7 +69,7 @@ export async function initLeftMenuTaskUI(initialState, onOpenEditor, onOpenViewe
   openTaskViewerFn = onOpenViewer; // Stores the viewer callback
 
   // Apply initial filter section visibility state
-  const appContainer = document.querySelector('.app');
+  const appContainer = document.querySelector(selectors.appContainer);
   if (appContainer) {
     appContainer.classList.toggle('filter-active', filterSectionVisible);
   }
@@ -181,7 +183,7 @@ export function updateLeftMenuTaskUIState(updatedState) {
   if (updatedState.currentSelectedTaskId !== undefined) currentSelectedTaskId = updatedState.currentSelectedTaskId;
   
   // Re-apply visibility and re-render filters if state changes
-  const appContainer = document.querySelector('.app');
+  const appContainer = document.querySelector(selectors.appContainer);
   if (appContainer) {
     appContainer.classList.toggle('filter-active', filterSectionVisible);
   }
@@ -491,6 +493,13 @@ function renderTaskItems(container, tasksToRender) {
           openTaskViewerFn(fullTask, false); // Pass false for isNewTask
       }
       renderTaskList(); // Re-render task list to update selection highlight
+
+      // On mobile, hide the sidebar and show the main content (editor/viewer)
+      const appContainer = document.querySelector(selectors.appContainer);
+      if (window.innerWidth <= 768) {
+        appContainer.classList.remove('sidebar-active');
+        appContainer.classList.add('viewer-active'); // Or editor-active, depending on where it leads
+      }
     });
     container.appendChild(node);
   });
@@ -612,4 +621,13 @@ export async function renderFilterStatusMultiSelect() {
     });
     dropdownContent.appendChild(item);
   });
+}
+
+// Function to handle showing the sidebar (e.g., when a close button is clicked)
+export function showLeftMenu() {
+  const appContainer = document.querySelector(selectors.appContainer);
+  if (window.innerWidth <= 768) {
+    appContainer.classList.remove('editor-active', 'viewer-active');
+    appContainer.classList.add('sidebar-active');
+  }
 }

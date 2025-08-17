@@ -16,6 +16,7 @@ let currentUsername = null; // Added current username
 let renderTaskListCallback = null; // Callback to re-render the task list after save/delete
 let openMilestonesViewCallback = null; // Callback to open the milestone view
 let openTaskViewerCallback = null; // New: Callback to open the task viewer
+let closeEditorCallback = null; // Callback to close the editor (for mobile UX)
 
 // Editor instances for description and notes
 let descEditorInstance = null;
@@ -28,7 +29,7 @@ const selectors = {
   taskFromSelect: '#taskFrom',
   taskPriorityInput: '#taskPriority',
   taskDeadlineInput: '#taskDeadline',
-  taskFinishDateInput: '#taskFinishDate',
+  taskFinishDateInput: '#taskDeadline',
   taskStatusSelect: '#statusSelect',
   descEditor: '#descEditor',
   notesEditor: '#notesEditor',
@@ -40,6 +41,8 @@ const selectors = {
   addCategoryBtn: '#addCategoryBtn',
   attachmentsList: '#attachments',
   viewerArea: '#viewerArea', // Add viewerArea selector
+  closeEditorBtn: '#closeTaskEditorBtn', // New selector for the close button
+  appContainer: '#app', // Added for mobile UX
 };
 
 /**
@@ -48,8 +51,9 @@ const selectors = {
  * @param {function} onRenderTaskList - Callback to re-render the task list.
  * @param {function} onOpenMilestonesView - Callback to open the milestone view for a task.
  * @param {function} onOpenTaskViewer - New: Callback to open the task viewer for a task.
+ * @param {function} onCloseEditor - Callback to close the editor (for mobile UX)
  */
-export function initTaskEditorUI(initialState, onRenderTaskList, onOpenMilestonesView, onOpenTaskViewer) {
+export function initTaskEditorUI(initialState, onRenderTaskList, onOpenMilestonesView, onOpenTaskViewer, onCloseEditor) {
   categories = initialState.categories;
   statuses = initialState.statuses;
   froms = initialState.froms;
@@ -57,6 +61,7 @@ export function initTaskEditorUI(initialState, onRenderTaskList, onOpenMilestone
   renderTaskListCallback = onRenderTaskList;
   openMilestonesViewCallback = onOpenMilestonesView;
   openTaskViewerCallback = onOpenTaskViewer; // Initialize new callback
+  closeEditorCallback = onCloseEditor; // Initialize new callback
 }
 
 /**
@@ -186,6 +191,10 @@ export async function openTaskEditor(task, isNewTask = false) {
   // Now, populate editorContainer with the task-specific HTML
   editorContainer.innerHTML = `
     <div class="card">
+      <div class="modal-header" style="padding-bottom: 0; margin-bottom: 12px; border-bottom: none;">
+        <h3>Edit Task</h3>
+        <!-- Close button removed from here, now placed beside Save/Delete -->
+      </div>
       <div class="label">Title</div>
       <input id="taskTitle" value="${escapeHtml(currentTask.title)}">
       <div class="label">From</div>
@@ -208,9 +217,10 @@ export async function openTaskEditor(task, isNewTask = false) {
       <div id="descEditor" class="card"></div>
       <div class="label">Notes</div>
       <div id="notesEditor" class="card"></div>
-      <div style="margin-top:8px;display:flex;gap:8px">
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
         <button id="saveBtn">Save</button>
         <button id="deleteBtn">Delete</button>
+        <button id="closeTaskEditorBtn" class="simple-close-btn">Close</button>
         <button id="openMilestonesBtn">Open Milestones</button>
       </div>
     </div>
@@ -262,6 +272,12 @@ export async function openTaskEditor(task, isNewTask = false) {
     if (openMilestonesViewCallback) openMilestonesViewCallback(currentTask.id, currentTask.title);
   });
 
+  // Add event listener for the new close button
+  editorContainer.querySelector(selectors.closeEditorBtn)?.addEventListener('click', () => {
+    if (closeEditorCallback) closeEditorCallback();
+  });
+
+
   renderCategoryTags();
   renderAttachments();
   renderNewCategoryDropdown();
@@ -279,6 +295,13 @@ export async function openTaskEditor(task, isNewTask = false) {
   });
 
   updateButtonStates(editorContainer); // Call to set initial button states
+
+  // On mobile, show the main content (editor) and hide the sidebar
+  const appContainer = document.querySelector(selectors.appContainer);
+  if (window.innerWidth <= 768) {
+    appContainer.classList.remove('sidebar-active', 'viewer-active');
+    appContainer.classList.add('editor-active');
+  }
 }
 
 /**
@@ -491,4 +514,11 @@ export function clearEditorArea() {
   // Clear editor instances when clearing the area
   descEditorInstance = null;
   notesEditorInstance = null;
+
+  // On mobile, if editor/viewer is closed, ensure sidebar is shown
+  const appContainer = document.querySelector(selectors.appContainer);
+  if (window.innerWidth <= 768) {
+    appContainer.classList.remove('editor-active', 'viewer-active');
+    appContainer.classList.add('sidebar-active'); // Show sidebar
+  }
 }
