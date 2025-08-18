@@ -107,7 +107,7 @@ function updateButtonStates(editorArea) {
  * @param {object} milestoneData - The milestone object (might be partial from IndexedDB).
  * @param {string} taskId - The ID of the parent task.
  */
-export async function openMilestoneEditor(milestoneData, taskId) {
+export async function openMilestoneEditor(milestoneData, taskId, isNew = false) {
   currentTaskId = taskId; // Store the task ID
 
   // Fetch the parent task to get its creator
@@ -121,14 +121,16 @@ export async function openMilestoneEditor(milestoneData, taskId) {
 
   // Fetch the full milestone data from the server to ensure notes are present
   let fullMilestone = null;
-  if (currentUsername && taskId && milestoneData.id) {
+  if (!isNew && currentUsername && taskId && milestoneData.id) {
       fullMilestone = await loadMilestoneFromServer(currentUsername, taskId, milestoneData.id);
   }
 
   // If fetching from server fails or returns null, fallback to the provided milestoneData
   // However, for notes, we strictly rely on server data as IndexedDB does not store them.
   if (!fullMilestone) {
+    if(!isNew){
       showModalAlert('Failed to load full milestone details from server. Notes may not be available.');
+    }
       fullMilestone = { ...milestoneData, notes: '' }; // Fallback, but clear notes if server fetch failed
   }
   currentMilestone = fullMilestone; // Set the currently selected milestone to the full server version

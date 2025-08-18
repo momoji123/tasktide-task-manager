@@ -71,7 +71,7 @@ export async function openMilestonesView(taskId, taskTitle) {
     const newMilestone = createEmptyMilestone(taskId);
     // open editor and re-render graph
     if (openMilestoneEditorCallback) {
-      openMilestoneEditorCallback(newMilestone, taskId);
+      openMilestoneEditorCallback(newMilestone, taskId, true);
     }
     renderMilestoneBubbles(taskId, milestonesGraphContainer); // Re-render graph
   });
