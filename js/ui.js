@@ -36,7 +36,7 @@ export const UI = (function() {
     froms = (await DB.getMeta('froms')) || ['Work', 'Personal', 'Shopping'];
     filterSectionVisible = (await DB.getMeta('filterSectionVisible')) ?? true;
     selectedFilterCategories = (await DB.getMeta('selectedFilterCategories')) || [];
-    username = (await DB.getMeta('username')) || null; // Load username
+    username = (await DB.getMeta('username')) ||sessionStorage.getItem('authUsername') ||  null; // Load username
 
     // 2. Prepare initial state object for passing to components
     const commonState = {

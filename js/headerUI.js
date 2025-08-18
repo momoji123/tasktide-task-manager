@@ -5,7 +5,7 @@
 import { DB } from './storage.js';
 import { escapeHtml, showModalAlert, showModalAlertConfirm } from './utilUI.js';
 // Import the new functions for login, logout, and getting authenticated username
-import { login, logout, getAuthenticatedUsername, initAuth } from './apiService.js';
+import { login, logout, getAuthenticatedUsername, initAuth, saveTaskToServer, saveMilestoneToServer, loadTasksSummaryFromServer, loadTaskFromServer, loadMilestonesForTaskFromServer } from './apiService.js';
 
 // Internal state, initialized by the main UI module
 let categories = [];
@@ -196,6 +196,7 @@ async function manageList(type, title, renderFilterCategoriesMultiSelectCallback
       button.addEventListener('click', async (e) => {
         const idxToRemove = parseInt(e.target.dataset.idx);
         const itemToRemove = tempList[idxToRemove];
+        // TODO: This should ideally check server for usage
         const allTasks = await DB.getAllTasks(); // Fetch all tasks inside the event listener
 
         let isInUse = false;
@@ -398,7 +399,8 @@ async function manageAuthentication(onUpdateUsernameCallback) {
   if (logoutConfirmBtn) {
     logoutConfirmBtn.addEventListener('click', async () => {
         logout(); // Call apiService logout
-        await DB.putMeta('username', null); // Clear username from IndexedDB
+        // No longer need to clear from IndexedDB if username is purely server-managed
+        // await DB.putMeta('username', null);
         username = null; // Update local state
         if (onUpdateUsernameCallback) onUpdateUsernameCallback(null); // Update global UI state
         showModalAlert('Logged out successfully.');
@@ -437,7 +439,8 @@ async function manageAuthentication(onUpdateUsernameCallback) {
 
         try {
             const loginResult = await login(newUsername, newPassword);
-            await DB.putMeta('username', loginResult.username); // Save username to IndexedDB
+            // No longer need to save username to IndexedDB if it's purely server-managed
+            // await DB.putMeta('username', loginResult.username);
             username = loginResult.username; // Update local state
             if (onUpdateUsernameCallback) onUpdateUsernameCallback(username); // Update global UI state
             showModalAlert('Login successful!');
@@ -485,7 +488,15 @@ async function clearAllData() {
  * Opens a modal for the user to select tasks for export, then exports the selected tasks.
  */
 async function exportJSON() {
-  const allTasks = await DB.getAllTasks();
+  // Fetch a summary of all tasks from the server
+  let allTasksSummary = [];
+  try {
+    allTasksSummary = await loadTasksSummaryFromServer();
+  } catch (error) {
+    console.error('Failed to load task summaries for export:', error);
+    showModalAlert('Error: Could not load tasks from server for export. Please check your network connection and try again.');
+    return;
+  }
 
   // Get the task export modal template and clone it
   const modalTemplate = document.getElementById('task-export-modal-template');
@@ -502,9 +513,9 @@ async function exportJSON() {
   const cancelBtn = modalClone.querySelector('.modal-cancel');
   const closeBtn = modalClone.querySelector('.modal-close');
 
-  // Populate the task list with checkboxes
+  // Populate the task list with checkboxes using the summary data
   taskSelectionList.innerHTML = '';
-  allTasks.forEach(task => {
+  allTasksSummary.forEach(task => {
     const taskItem = document.createElement('div');
     taskItem.className = 'task-selection-item';
     taskItem.innerHTML = `
@@ -542,17 +553,26 @@ async function exportJSON() {
         return;
       }
 
-      const selectedTasks = allTasks.filter(task => selectedTaskIds.includes(task.id));
-
-      // Fetch all milestones and attach them to their respective tasks
-      const tasksWithMilestones = await Promise.all(selectedTasks.map(async (task) => {
-        const milestones = await DB.getMilestonesForTask(task.id);
-        return { ...task, milestones: milestones };
-      }));
+      const tasksToExport = [];
+      for (const taskId of selectedTaskIds) {
+        try {
+          // Fetch full task details and its milestones from the server
+          const fullTask = await loadTaskFromServer(taskId);
+          if (fullTask) {
+            const milestones = await loadMilestonesForTaskFromServer(taskId);
+            tasksToExport.push({ ...fullTask, milestones: milestones || [] });
+          } else {
+            console.warn(`Task '${taskId}' not found on server during export.`);
+          }
+        } catch (fetchError) {
+          console.error(`Failed to fetch task '${taskId}' or its milestones from server for export:`, fetchError);
+          showModalAlert(`Error fetching task '${taskId}' for export. Some data might be missing.`);
+        }
+      }
 
       const data = {
-          tasks: tasksWithMilestones,
-          categories: categories, // Still export all categories/statuses/froms
+          tasks: tasksToExport,
+          categories: categories, // Still export all categories/statuses/froms (from local state)
           statuses: statuses,
           froms: froms,
       };
@@ -577,6 +597,7 @@ async function exportJSON() {
 
 /**
  * Imports tasks, categories, statuses, and froms from a JSON file.
+ * Tasks and milestones will now be saved to the server.
  * @param {Event} e - The change event from the file input.
  */
 async function importJSON(e) {
@@ -585,46 +606,58 @@ async function importJSON(e) {
   const txt = await f.text();
   try {
     const j = JSON.parse(txt);
+
+    // Update categories, statuses, froms lists in memory.
+    // These are currently not synced to the server by this import,
+    // as the server is mainly for tasks/milestones.
+    // If these lists also need to be server-synced, additional API
+    // endpoints would be required.
     if (j.categories) {
       categories.push(...j.categories);
-      // Remove duplicates
-      categories = [...new Set(categories)];
+      categories = [...new Set(categories)]; // Remove duplicates
       if (updateLeftMenuTaskUICallback) updateLeftMenuTaskUICallback({ categories: categories });
       if (updateTaskEditorUICallback) updateTaskEditorUICallback({ categories: categories });
+      await DB.putMeta('categories', categories); // Still saving to IndexedDB for now
     }
     if (j.statuses) {
       statuses.push(...j.statuses);
-      // Remove duplicate
-      statuses = [...new Set(statuses)];
+      statuses = [...new Set(statuses)]; // Remove duplicate
       if (updateLeftMenuTaskUICallback) updateLeftMenuTaskUICallback({ statuses: statuses });
       if (updateTaskEditorUICallback) updateTaskEditorUICallback({ statuses: statuses });
       if (updateMilestoneEditorUICallback) updateMilestoneEditorUICallback({ statuses: statuses });
+      await DB.putMeta('statuses', statuses); // Still saving to IndexedDB for now
     }
     if (j.froms) {
       froms.push(...j.froms);
-      // Remove duplicate
-      froms = [...new Set(froms)];
+      froms = [...new Set(froms)]; // Remove duplicate
       if (updateLeftMenuTaskUICallback) updateLeftMenuTaskUICallback({ froms: froms });
       if (updateTaskEditorUICallback) updateTaskEditorUICallback({ froms: froms });
+      await DB.putMeta('froms', froms); // Still saving to IndexedDB for now
     }
 
     if (j.tasks) {
       for (const t of j.tasks) {
-        // Temporarily extract milestones if they exist
-        const milestonesToImport = t.milestones || [];
-        // Remove milestones property from task before saving the task itself
-        delete t.milestones;
-        await DB.putTask(t);
+        try {
+          // Temporarily extract milestones if they exist
+          const milestonesToImport = t.milestones || [];
+          // Remove milestones property from task before saving the task itself
+          delete t.milestones;
 
-        // Save associated milestones
-        for (const m of milestonesToImport) {
-          await DB.putMilestone(m);
+          // Save task to server
+          await saveTaskToServer(t);
+          console.log(`Task '${t.id}' imported to server.`);
+
+          // Save associated milestones to server
+          for (const m of milestonesToImport) {
+            await saveMilestoneToServer(m, t.id);
+            console.log(`Milestone '${m.id}' for task '${t.id}' imported to server.`);
+          }
+        } catch (saveError) {
+          console.error(`Failed to import task '${t.id}' or its milestones to server:`, saveError);
+          showModalAlert(`Error importing task '${t.id}': ${saveError.message}. Some data might not be saved.`);
         }
       }
     }
-    await DB.putMeta('categories', categories);
-    await DB.putMeta('statuses', statuses);
-    await DB.putMeta('froms', froms);
 
     // Call callbacks provided by the main UI module
     if (renderTaskListCallback) await renderTaskListCallback();
@@ -632,7 +665,7 @@ async function importJSON(e) {
       document.querySelector(selectors.settingsDropdown).classList.remove('show');
     }
 
-    showModalAlert('Import successful!');
+    showModalAlert('Import successful! Tasks and milestones are now saved on the server.');
   } catch (e) {
     console.error(e);
     showModalAlert('Error importing file. Please ensure it is a valid task export JSON.');
