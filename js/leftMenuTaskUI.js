@@ -196,6 +196,8 @@ export function updateLeftMenuTaskUIState(updatedState) {
  * Renders the list of tasks based on current filters and sorting/grouping.
  */
 export async function renderTaskList() {
+  const stack = new Error().stack;
+console.log(stack);
   const container = document.querySelector(selectors.taskList);
   
   
@@ -485,7 +487,7 @@ function renderTaskItems(container, tasksToRender) {
       let fullTask = t;
       // Only attempt to load if it has a creator and missing full details
       if (t.creator && (!t.description || !t.notes || !t.attachments)) {
-          fullTask = await loadTaskFromServer(t.creator, t.id) || t; // Use centralized API service
+          fullTask = await loadTaskFromServer(t.id) || t; // Use centralized API service
       }
 
       // When an existing task is clicked, open the viewer

@@ -54,8 +54,6 @@ export const UI = (function() {
         // Also update the state of modules that depend on username
         TaskEditorUI.updateTaskEditorUIState({ username: newUsername });
         MilestoneEditorUI.updateMilestoneEditorUIState({ username: newUsername });
-        // Re-render task list after username update to reflect permissions/creator info
-        LeftMenuTaskUI.renderTaskList();
     };
 
     // Define the close callbacks here, to be passed to relevant modules

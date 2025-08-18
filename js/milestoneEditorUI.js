@@ -122,7 +122,7 @@ export async function openMilestoneEditor(milestoneData, taskId, isNew = false) 
   // Fetch the full milestone data from the server to ensure notes are present
   let fullMilestone = null;
   if (!isNew && currentUsername && taskId && milestoneData.id) {
-      fullMilestone = await loadMilestoneFromServer(currentUsername, taskId, milestoneData.id);
+      fullMilestone = await loadMilestoneFromServer(taskId, milestoneData.id);
   }
 
   // If fetching from server fails or returns null, fallback to the provided milestoneData
@@ -221,8 +221,8 @@ async function saveMilestone() {
   if (!currentMilestone || !currentTaskId) return;
 
   // Enforce username requirement and creator match
-  if (!currentUsername || taskCreator !== currentUsername) {
-      showModalAlert('You can only save milestones for tasks you created. Please set your username in Settings or select a task you created.');
+  if (!currentUsername) {
+      showModalAlert('Please login');
       return;
   }
 
@@ -239,7 +239,7 @@ async function saveMilestone() {
 
   await DB.putMilestone(currentMilestone); // Save to IndexedDB (notes excluded here, by design in DB module)
   try {
-    await saveMilestoneToServer(currentMilestone, currentTaskId, taskCreator); // Use centralized API service to save full milestone including notes
+    await saveMilestoneToServer(currentMilestone, currentTaskId); // Use centralized API service to save full milestone including notes
     showModalAlert('Milestone saved!');
   } catch (error) {
     showModalAlert(`Error saving milestone: ${error.message}`);
@@ -285,7 +285,7 @@ async function deleteMilestone() {
   if (confirmed) {
     try {
       await DB.deleteMilestone(currentMilestone.id); // Delete from IndexedDB
-      await deleteMilestoneFromServer(currentMilestone.id, currentTaskId, taskCreator); // Use centralized API service
+      await deleteMilestoneFromServer(currentMilestone.id, currentTaskId); // Use centralized API service
 
       currentMilestone = null; // Clear selected milestone
       if (updateCurrentMilestoneCallback) updateCurrentMilestoneCallback(null); // Inform graph UI no milestone is selected

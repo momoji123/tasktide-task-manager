@@ -4,13 +4,14 @@
 
 import { DB } from './storage.js';
 import { escapeHtml, showModalAlert, showModalAlertConfirm } from './utilUI.js';
-import { setAuthCredentials } from './apiService.js'; // Import the new function
+// Import the new functions for login, logout, and getting authenticated username
+import { login, logout, getAuthenticatedUsername, initAuth } from './apiService.js';
 
 // Internal state, initialized by the main UI module
 let categories = [];
 let statuses = [];
 let froms = [];
-let username = null; // Added username state
+let username = null; // Username will now be managed via apiService's token
 let renderTaskListCallback = null; // Callback to trigger task list re-render in leftMenuTaskUI
 let updateLeftMenuTaskUICallback = null; // New callback
 let updateTaskEditorUICallback = null;   // New callback
@@ -26,7 +27,7 @@ const selectors = {
   manageCategoriesBtn: '#manageCategoriesBtn',
   manageStatusesBtn: '#manageStatusesBtn',
   manageFromsBtn: '#manageFromsBtn',
-  manageUsernameBtn: '#manageUsernameBtn', // New selector for username setting
+  manageAuthBtn: '#manageAuthBtn', // Renamed selector for authentication settings
   clearAllBtn: '#clearAllBtn',
   filterCategoryMultiSelect: '#filterCategoryMultiSelect', // Needed for dropdown close logic
 };
@@ -47,58 +48,56 @@ export function initHeader(
   onRenderTaskList,
   onRenderFilterCategoriesMultiSelect,
   onRenderStatusOptions,
-  onUpdateLeftMenuTaskUI, // New parameter
-  onUpdateTaskEditorUI,   // New parameter
-  onUpdateMilestoneEditorUI, // New parameter
-  onUpdateUsername // New parameter
+  onUpdateLeftMenuTaskUI,
+  onUpdateTaskEditorUI,
+  onUpdateMilestoneEditorUI,
+  onUpdateUsername
 ) {
   categories = initialState.categories;
   statuses = initialState.statuses;
   froms = initialState.froms;
-  username = initialState.username; // Initialize username
-  renderTaskListCallback = onRenderTaskList; // Store callback for later use
+  // username is now initially managed by apiService
+  username = getAuthenticatedUsername(); // Get username from apiService
+  renderTaskListCallback = onRenderTaskList;
   const renderFilterCategoriesMultiSelectCallback = onRenderFilterCategoriesMultiSelect;
   const renderStatusOptionsCallback = onRenderStatusOptions;
-  updateLeftMenuTaskUICallback = onUpdateLeftMenuTaskUI;     // Store new callback
-  updateTaskEditorUICallback = onUpdateTaskEditorUI;       // Store new callback
-  updateMilestoneEditorUICallback = onUpdateMilestoneEditorUI; // Store new callback
-  updateUsernameCallback = onUpdateUsername; // Store new callback
+  updateLeftMenuTaskUICallback = onUpdateLeftMenuTaskUI;
+  updateTaskEditorUICallback = onUpdateTaskEditorUI;
+  updateMilestoneEditorUICallback = onUpdateMilestoneEditorUI;
+  updateUsernameCallback = onUpdateUsername;
 
-  // Event listener for the new settings button to toggle the dropdown
+  // Initialize auth from session storage on load
+  initAuth();
+  // Update username displayed in the UI after initAuth
+  username = getAuthenticatedUsername();
+  if (updateUsernameCallback) updateUsernameCallback(username);
+
+
   const settingsBtn = document.querySelector(selectors.settingsBtn);
   const settingsDropdown = document.querySelector(selectors.settingsDropdown);
 
   if (settingsBtn) {
     settingsBtn.addEventListener('click', (event) => {
       settingsDropdown.classList.toggle('show');
-      event.stopPropagation(); // Prevent the document click listener from immediately closing it
+      event.stopPropagation();
     });
   }
 
-  // Close the dropdown if the user clicks outside of it
   window.addEventListener('click', (event) => {
     if (settingsDropdown && !event.target.matches(selectors.settingsBtn) && !event.target.closest(selectors.filterCategoryMultiSelect) && settingsDropdown.classList.contains('show')) {
       settingsDropdown.classList.remove('show');
     }
   });
 
-  // Attach event listeners to the manage buttons now located inside the dropdown
   document.querySelector(selectors.manageCategoriesBtn)?.addEventListener('click', () => manageList('categories', 'Manage Categories', renderFilterCategoriesMultiSelectCallback, renderStatusOptionsCallback));
   document.querySelector(selectors.manageStatusesBtn)?.addEventListener('click', () => manageList('statuses', 'Manage Statuses', renderFilterCategoriesMultiSelectCallback, renderStatusOptionsCallback));
   document.querySelector(selectors.manageFromsBtn)?.addEventListener('click', () => manageList('froms', 'Manage "From" Sources', renderFilterCategoriesMultiSelectCallback, renderStatusOptionsCallback));
-  // Updated: Use manageCredentials for the username/password button
-  document.querySelector(selectors.manageUsernameBtn)?.addEventListener('click', () => manageCredentials(updateUsernameCallback));
-  document.querySelector(selectors.clearAllBtn)?.addEventListener('click', clearAllData); // Event listener for clear all
+  document.querySelector(selectors.manageAuthBtn)?.addEventListener('click', () => manageAuthentication(updateUsernameCallback)); // Updated to call manageAuthentication
+  document.querySelector(selectors.clearAllBtn)?.addEventListener('click', clearAllData);
 
   document.querySelector(selectors.exportBtn)?.addEventListener('click', exportJSON);
   document.querySelector(selectors.importBtn)?.addEventListener('click', () => document.querySelector(selectors.importFile)?.click());
   document.querySelector(selectors.importFile)?.addEventListener('change', importJSON);
-
-  // Attempt to set initial authentication username from IndexedDB on load.
-  // Password is NOT persisted, so it will need to be re-entered.
-  if (username) {
-      setAuthCredentials(username, ''); // Set username, but password will be empty/null initially
-  }
 }
 
 /**
@@ -110,7 +109,8 @@ export function updateHeaderState(updatedState) {
   if (updatedState.categories) categories = updatedState.categories;
   if (updatedState.statuses) statuses = updatedState.statuses;
   if (updatedState.froms) froms = updatedState.froms;
-  if (updatedState.username !== undefined) username = updatedState.username; // Update username
+  // Username update is now primarily driven by apiService login/logout
+  if (updatedState.username !== undefined) username = updatedState.username;
 }
 
 
@@ -329,14 +329,12 @@ function isValidPathSegment(segment) {
 
 
 /**
- * Manages the username and password settings through a modal.
- * The username is persisted locally, while the password is only held in memory for the session.
+ * Manages user authentication (login/logout).
  * @param {function} onUpdateUsernameCallback - Callback to update the username in the main UI module.
  */
-async function manageCredentials(onUpdateUsernameCallback) {
-  let currentUsername = (await DB.getMeta('username')) || ''; // Get current username
+async function manageAuthentication(onUpdateUsernameCallback) {
+  const currentUsername = getAuthenticatedUsername(); // Get current authenticated username from apiService
 
-  // Get the modal template and clone it
   const modalTemplate = document.getElementById('modal-template');
   if (!modalTemplate) {
     console.error('Modal template not found.');
@@ -350,14 +348,18 @@ async function manageCredentials(onUpdateUsernameCallback) {
   const cancelBtn = modalClone.querySelector('.modal-cancel');
   const closeBtn = modalClone.querySelector('.modal-close');
 
-  modalHeaderTitle.textContent = 'Set Username & Password';
+  modalHeaderTitle.textContent = 'Login / Logout';
 
-  modalBody.innerHTML = `
-    <div class="username-manager-container">
-      <p>Your username and password are required to save and delete tasks and milestones on the server. The username also helps organize your data.</p>
+  let loginSectionHtml = '';
+  let logoutSectionHtml = '';
+
+  if (!currentUsername) {
+    // Show login form if not logged in
+    loginSectionHtml = `
+      <p>Please log in to save and sync your tasks.</p>
       <div style="margin-top: 12px;">
           <label for="usernameInput" class="label">Username</label>
-          <input type="text" id="usernameInput" placeholder="Enter your username" value="${escapeHtml(currentUsername)}" class="w-full mt-1 p-2 border rounded">
+          <input type="text" id="usernameInput" placeholder="Enter your username" value="" class="w-full mt-1 p-2 border rounded">
       </div>
       <div style="margin-top: 12px;">
           <label for="passwordInput" class="label">Password</label>
@@ -367,6 +369,22 @@ async function manageCredentials(onUpdateUsernameCallback) {
           <label for="confirmPasswordInput" class="label">Confirm Password</label>
           <input type="password" id="confirmPasswordInput" placeholder="Confirm your password" class="w-full mt-1 p-2 border rounded">
       </div>
+    `;
+    saveBtn.textContent = 'Login'; // Change button text to Login
+  } else {
+    // Show logout confirmation if logged in
+    logoutSectionHtml = `
+      <p>You are currently logged in as: <strong>${escapeHtml(currentUsername)}</strong>.</p>
+      <p>Are you sure you want to log out?</p>
+      <button id="logoutConfirmBtn" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded mt-4">Log Out</button>
+    `;
+    saveBtn.style.display = 'none'; // Hide Save button for logout flow
+  }
+
+  modalBody.innerHTML = `
+    <div class="auth-manager-container">
+      ${loginSectionHtml}
+      ${logoutSectionHtml}
     </div>
   `;
 
@@ -375,44 +393,58 @@ async function manageCredentials(onUpdateUsernameCallback) {
   const usernameInput = modalBody.querySelector('#usernameInput');
   const passwordInput = modalBody.querySelector('#passwordInput');
   const confirmPasswordInput = modalBody.querySelector('#confirmPasswordInput');
+  const logoutConfirmBtn = modalBody.querySelector('#logoutConfirmBtn');
+
+  if (logoutConfirmBtn) {
+    logoutConfirmBtn.addEventListener('click', async () => {
+        logout(); // Call apiService logout
+        await DB.putMeta('username', null); // Clear username from IndexedDB
+        username = null; // Update local state
+        if (onUpdateUsernameCallback) onUpdateUsernameCallback(null); // Update global UI state
+        showModalAlert('Logged out successfully.');
+        modalBackdrop.remove(); // Close modal
+    });
+  }
 
   return new Promise(resolve => {
-    const cleanupAndResolve = (saved) => {
+    const cleanupAndResolve = (actionPerformed) => {
       modalBackdrop.remove();
-      resolve(saved);
+      resolve(actionPerformed);
     };
 
     saveBtn.onclick = async () => {
-      const newUsername = usernameInput.value.trim();
-      const newPassword = passwordInput.value;
-      const confirmPassword = confirmPasswordInput.value;
+        // This block runs only if we're in the login flow
+        const newUsername = usernameInput.value.trim();
+        const newPassword = passwordInput.value;
+        const confirmPassword = confirmPasswordInput.value;
 
-      // Client-side validation for username and password
-      if (!newUsername) {
-        showModalAlert('Username cannot be empty. Please enter a valid username.');
-        return;
-      }
-      if (!isValidPathSegment(newUsername)) {
-        showModalAlert('Invalid username. It cannot contain ".." or path separators like "/" or "\\", and cannot start with a ".".');
-        return;
-      }
-      if (!newPassword) {
-          showModalAlert('Password cannot be empty. Please enter a password.');
-          return;
-      }
-      if (newPassword !== confirmPassword) {
-        showModalAlert('Passwords do not match. Please re-enter your password.');
-        return;
-      }
+        if (!newUsername) {
+            showModalAlert('Username cannot be empty. Please enter a valid username.');
+            return;
+        }
+        if (!isValidPathSegment(newUsername)) {
+            showModalAlert('Invalid username. It cannot contain ".." or path separators like "/" or "\\", and cannot start with a ".".');
+            return;
+        }
+        if (!newPassword) {
+            showModalAlert('Password cannot be empty. Please enter a password.');
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            showModalAlert('Passwords do not match. Please re-enter your password.');
+            return;
+        }
 
-      // Set credentials in apiService for the current session
-      setAuthCredentials(newUsername, newPassword);
-
-      await DB.putMeta('username', newUsername); // Save username to IndexedDB
-      username = newUsername; // Update local state
-      if (onUpdateUsernameCallback) onUpdateUsernameCallback(newUsername); // Update global UI state
-      showModalAlert('Username and password saved successfully for this session!');
-      cleanupAndResolve(true);
+        try {
+            const loginResult = await login(newUsername, newPassword);
+            await DB.putMeta('username', loginResult.username); // Save username to IndexedDB
+            username = loginResult.username; // Update local state
+            if (onUpdateUsernameCallback) onUpdateUsernameCallback(username); // Update global UI state
+            showModalAlert('Login successful!');
+            cleanupAndResolve(true);
+        } catch (error) {
+            showModalAlert(`Login failed: ${error.message}`);
+        }
     };
     cancelBtn.onclick = () => cleanupAndResolve(false);
     closeBtn.onclick = () => cleanupAndResolve(false);
@@ -437,6 +469,7 @@ async function clearAllData() {
       console.log("Database deleted successfully");
       // Also clear any localStorage if used for other settings (though this app primarily uses IndexedDB)
       localStorage.clear();
+      sessionStorage.clear(); // Clear session storage as well
       // Reload the page to reflect the cleared state
       window.location.reload();
     };

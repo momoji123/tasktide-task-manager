@@ -149,7 +149,7 @@ export async function openTaskEditor(task, isNewTask = false) {
           showModalAlert('Cannot load full task details: Task creator is not set. Please save the task first if it\'s new, or ensure your username is set if it\'s an existing task.');
           return;
       }
-      const fullTask = await loadTaskFromServer(task.creator, task.id); // Use centralized API service
+      const fullTask = await loadTaskFromServer(task.id); // Use centralized API service
       if (fullTask) {
           currentTask = fullTask; // Use the full task from the server
       } else {

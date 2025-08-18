@@ -52,7 +52,7 @@ export function initTaskViewerUI(onOpenTaskEditor, onOpenMilestonesView, onClose
 export async function openTaskViewer(task, isNewTask = false) {
   // If description, notes, or attachments are missing, fetch the full task from the server
   if (!isNewTask && (!task.description || !task.notes || !task.attachments)) {
-      const fullTask = await loadTaskFromServer(task.creator, task.id); // Use centralized API service
+      const fullTask = await loadTaskFromServer(task.id); // Use centralized API service
       if (fullTask) {
           currentTask = fullTask; // Use the full task from the server
       } else {

@@ -1,74 +1,128 @@
 // js/apiService.js
-// Centralized service for making API calls to the backend.
+// Centralized service for making API calls to the backend using JWT authentication.
 
 const API_BASE_URL = 'http://localhost:12345'; // Define your API base URL here
 
-// Module-level variables to store authentication credentials for the current session.
+// Module-level variables to store authentication token and associated username.
 // These are NOT persisted to IndexedDB for security reasons.
-let _authUsername = null;
-let _authPassword = null;
+let _authToken = null;
+let _authUsername = null; // Username extracted from the token payload, or set on login
 
 /**
- * Sets the authentication credentials to be used for all subsequent API calls.
- * These credentials are held in memory for the current session only.
- * @param {string} username - The username for authentication.
- * @param {string} password - The password for authentication.
+ * Initializes authentication by attempting to load the token from sessionStorage.
+ * This should be called once on application load.
  */
-export function setAuthCredentials(username, password) {
-    _authUsername = username;
-    _authPassword = password;
+export function initAuth() {
+    const storedToken = sessionStorage.getItem('authToken');
+    const storedUsername = sessionStorage.getItem('authUsername');
+    if (storedToken && storedUsername) {
+        _authToken = storedToken;
+        _authUsername = storedUsername;
+        console.log('Auth token and username loaded from sessionStorage.');
+    }
 }
 
 /**
- * Generates the Basic Authorization header string.
- * @returns {string|null} The Authorization header value (e.g., "Basic base64encodedcredentials") or null if credentials are not set.
+ * Attempts to log in the user and retrieve a JWT.
+ * @param {string} username - The username for authentication.
+ * @param {string} password - The password for authentication.
+ * @returns {Promise<object>} The server response containing the token and username.
+ * @throws {Error} If login fails or network error occurs.
+ */
+export async function login(username, password) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/login`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ username, password })
+        });
+
+        const data = await handleApiResponse(response);
+        _authToken = data.token;
+        _authUsername = data.username;
+        sessionStorage.setItem('authToken', _authToken); // Persist token in session storage
+        sessionStorage.setItem('authUsername', _authUsername); // Persist username in session storage
+        return { token: _authToken, username: _authUsername };
+    } catch (error) {
+        console.error('Failed to login:', error);
+        throw error;
+    }
+}
+
+/**
+ * Logs out the user by clearing the token from memory and sessionStorage.
+ */
+export function logout() {
+    _authToken = null;
+    _authUsername = null;
+    sessionStorage.removeItem('authToken');
+    sessionStorage.removeItem('authUsername');
+    console.log('User logged out.');
+}
+
+/**
+ * Returns the currently authenticated username.
+ * @returns {string|null} The username or null if not authenticated.
+ */
+export function getAuthenticatedUsername() {
+    return _authUsername;
+}
+
+/**
+ * Generates the Bearer Authorization header string.
+ * @returns {string|null} The Authorization header value (e.g., "Bearer token") or null if no token is set.
  */
 function _getAuthHeader() {
-    if (_authUsername && _authPassword) {
-        // Encode username and password in Base64 for Basic Auth
-        const credentials = btoa(`${_authUsername}:${_authPassword}`);
-        return `Basic ${credentials}`;
+    if (_authToken) {
+        return `Bearer ${_authToken}`;
     }
-    return null; // No auth header if credentials are not set
+    return null; // No auth header if no token is set
 }
 
 /**
  * Handles common API response processing, including error handling.
  * @param {Response} response - The fetch API Response object.
  * @returns {Promise<object>} The JSON data from the response.
- * @throws {Error} If the response is not OK (status code outside 200-299),
- * or if authentication is required (401 status).
+ * @throws {Error} If the response is not OK (status code outside 200-299).
  */
 async function handleApiResponse(response) {
-    if (!response.ok) {
-        let errorData = {};
-        try {
-            errorData = await response.json();
-        } catch (e) {
-            // Ignore if response body isn't JSON
-        }
-        const errorMessage = errorData.error || `Server error: ${response.status} ${response.statusText}`;
+    let errorData = {};
+    try {
+        errorData = await response.json(); // Attempt to parse JSON even on error for more details
+    } catch (e) {
+        // Ignore if response body isn't JSON
+    }
 
+    if (!response.ok) {
+        const errorMessage = errorData.error || `Server error: ${response.status} ${response.statusText}`;
+        console.error('API Response Error:', errorMessage, response);
+        // Specifically handle 401 Unauthorized errors
         if (response.status === 401) {
-            // Specific error for authentication issues, so the UI can prompt the user
-            throw new Error(`Authentication Required: ${errorMessage}. Please go to Settings > Manage Username & Password.`);
+            // Depending on the app flow, you might want to automatically logout or
+            // show a specific message to re-login.
+            // For now, we'll just throw the error, and the calling function
+            // can decide whether to prompt for re-authentication.
+            logout(); // Clear token on 401 to ensure user must re-login
+            throw new Error(`Authentication Required: ${errorMessage}. Please re-login.`);
         }
         throw new Error(errorMessage);
     }
-    return response.json();
+    return errorData; // If response.ok, errorData is actually the success data
 }
 
 /**
  * Attaches the Authorization header to the request options.
- * Throws an error if authentication credentials are not set.
+ * Throws an error if authentication token is not set.
  * @param {object} options - The fetch request options.
  * @returns {object} The updated options object with Authorization header.
- * @throws {Error} If authentication credentials are not set.
+ * @throws {Error} If authentication token is not set.
  */
 function _withAuth(options = {}) {
     const authHeader = _getAuthHeader();
     if (!authHeader) {
-        throw new Error("Authentication credentials are not set. Please go to Settings > Manage Username & Password to proceed with server operations.");
+        throw new Error("Authentication token is not set. Please login to proceed with server operations.");
     }
     return {
         ...options,
@@ -81,34 +135,26 @@ function _withAuth(options = {}) {
 
 /**
  * Loads a task's full details from the server.
- * @param {string} username - The username (creator) of the task.
  * @param {string} taskId - The ID of the task to load.
  * @returns {Promise<object|null>} The full task object or null if not found/error.
  */
-export async function loadTaskFromServer(username, taskId) {
-    if (!username) {
-        console.error('API Error: Username is not set. Cannot load task from server.');
-        return null;
-    }
+export async function loadTaskFromServer(taskId) {
+    // Username is no longer passed as a separate parameter; it's implicit in the token
     try {
         const response = await fetch(`${API_BASE_URL}/load-task/${taskId}`, _withAuth());
         return await handleApiResponse(response);
     } catch (error) {
         console.error('Failed to load task from server:', error);
-        throw error; // Re-throw to allow calling modules to handle alerts
+        throw error;
     }
 }
 
 /**
  * Sends task data to the Python server.
  * @param {object} task - The task object to save.
- * @param {string} username - The username of the task creator.
  */
-export async function saveTaskToServer(task, username) {
-    if (!username) {
-        console.error('API Error: Username is not set. Cannot save task.');
-        throw new Error('API Error: Username is not set. Cannot save task.');
-    }
+export async function saveTaskToServer(task) {
+    // Username is no longer passed as a separate parameter; it's implicit in the token
     try {
         const response = await fetch(`${API_BASE_URL}/save-task/${task.id}`, _withAuth({
             method: 'PUT',
@@ -127,13 +173,9 @@ export async function saveTaskToServer(task, username) {
 /**
  * Deletes a task and its associated folder from the Python server.
  * @param {string} taskId - The ID of the task to delete.
- * @param {string} username - The username of the task creator.
  */
-export async function deleteTaskFromServer(taskId, username) {
-    if (!username) {
-        console.error('API Error: Username is not set. Cannot delete task.');
-        throw new Error('API Error: Username is not set. Cannot delete task.');
-    }
+export async function deleteTaskFromServer(taskId) {
+    // Username is no longer passed as a separate parameter; it's implicit in the token
     try {
         const response = await fetch(`${API_BASE_URL}/delete-task/${taskId}`, _withAuth({
             method: 'DELETE'
@@ -147,15 +189,11 @@ export async function deleteTaskFromServer(taskId, username) {
 
 /**
  * Loads all milestones for a given task from the server.
- * @param {string} username - The username (creator) of the task.
  * @param {string} taskId - The ID of the parent task.
  * @returns {Promise<object[]|null>} An array of milestone objects or null if not found/error.
  */
-export async function loadMilestonesForTaskFromServer(username, taskId) {
-    if (!username || !taskId) {
-        console.error('API Error: Missing parameters for loading milestones from server.');
-        return null;
-    }
+export async function loadMilestonesForTaskFromServer(taskId) {
+    // Username is no longer passed as a separate parameter; it's implicit in the token
     try {
         const response = await fetch(`${API_BASE_URL}/load-milestones/${taskId}`, _withAuth());
         return await handleApiResponse(response);
@@ -169,13 +207,9 @@ export async function loadMilestonesForTaskFromServer(username, taskId) {
  * Sends milestone data to the Python server.
  * @param {object} milestone - The milestone object to save.
  * @param {string} taskId - The ID of the parent task.
- * @param {string} username - The username of the task creator.
  */
-export async function saveMilestoneToServer(milestone, taskId, username) {
-    if (!username) {
-        console.error('API Error: Task creator username is not available. Cannot save milestone.');
-        throw new Error('API Error: Task creator username is not available. Cannot save milestone.');
-    }
+export async function saveMilestoneToServer(milestone, taskId) {
+    // Username is no longer passed as a separate parameter; it's implicit in the token
     try {
         const response = await fetch(`${API_BASE_URL}/save-milestone/${taskId}/${milestone.id}`, _withAuth({
             method: 'PUT',
@@ -193,16 +227,12 @@ export async function saveMilestoneToServer(milestone, taskId, username) {
 
 /**
  * Loads a single milestone's full details (including notes) from the server.
- * @param {string} username - The username (creator) of the task.
  * @param {string} taskId - The ID of the parent task.
  * @param {string} milestoneId - The ID of the milestone to load.
  * @returns {Promise<object|null>} The full milestone object or null if not found/error.
  */
-export async function loadMilestoneFromServer(username, taskId, milestoneId) {
-    if (!username || !taskId || !milestoneId) {
-        console.error('API Error: Missing parameters for loading milestone from server.');
-        return null;
-    }
+export async function loadMilestoneFromServer(taskId, milestoneId) {
+    // Username is no longer passed as a separate parameter; it's implicit in the token
     try {
         const response = await fetch(`${API_BASE_URL}/load-milestone/${taskId}/${milestoneId}`, _withAuth());
         return await handleApiResponse(response);
@@ -216,13 +246,9 @@ export async function loadMilestoneFromServer(username, taskId, milestoneId) {
  * Deletes milestone data from the Python server.
  * @param {string} milestoneId - The ID of the milestone to delete.
  * @param {string} taskId - The ID of the parent task.
- * @param {string} username - The username of the task creator.
  */
-export async function deleteMilestoneFromServer(milestoneId, taskId, username) {
-    if (!username) {
-        console.error('API Error: Task creator username is not available. Cannot delete milestone.');
-        throw new Error('API Error: Task creator username is not available. Cannot delete milestone.');
-    }
+export async function deleteMilestoneFromServer(milestoneId, taskId) {
+    // Username is no longer passed as a separate parameter; it's implicit in the token
     try {
         const response = await fetch(`${API_BASE_URL}/delete-milestone/${taskId}/${milestoneId}`, _withAuth({
             method: 'DELETE'

@@ -4,18 +4,83 @@ import json
 import sqlite3
 import os
 from urllib.parse import urlparse
-import hashlib # For potential hashing if not using user_manager directly
-import hmac # For secure comparison
+import hashlib
+import hmac
 import base64
+from datetime import datetime, timedelta
+import time # For Unix timestamp
 
 # Import functions from user_manager
-from user_manager import verify_user, _init_auth_db # Import _init_auth_db to ensure auth db is initialized
+from user_manager import verify_user, _init_auth_db
 
 # Define the port number the server will listen on.
 PORT = 12345
 
 # Define the SQLite database file path.
 DB_FILE = "./data/tasks.db"
+
+# Secret key for JWT. In a real application, this should be loaded from
+# an environment variable or a secure configuration management system.
+# DO NOT expose this in source control in production.
+SECRET_KEY = "your_super_secret_jwt_key_please_change_this!".encode('utf-8') # Must be bytes for hmac
+
+# --- JWT Helper Functions (Manual Implementation) ---
+
+def _base64url_encode(data):
+    """Encodes bytes to Base64Url string."""
+    encoded = base64.urlsafe_b64encode(data).rstrip(b'=').decode('utf-8')
+    return encoded
+
+def _base64url_decode(data):
+    """Decodes Base64Url string to bytes."""
+    padding = '=' * (4 - (len(data) % 4))
+    return base64.urlsafe_b64decode(data + padding)
+
+def _generate_jwt(payload_data, secret):
+    """Generates a JWT manually."""
+    header = {"alg": "HS256", "typ": "JWT"}
+    encoded_header = _base64url_encode(json.dumps(header).encode('utf-8'))
+    encoded_payload = _base64url_encode(json.dumps(payload_data).encode('utf-8'))
+
+    signing_input = f"{encoded_header}.{encoded_payload}".encode('utf-8')
+    signature = hmac.new(secret, signing_input, hashlib.sha256).digest()
+    encoded_signature = _base64url_encode(signature)
+
+    return f"{encoded_header}.{encoded_payload}.{encoded_signature}"
+
+def _verify_jwt(token, secret):
+    """Verifies a JWT manually and returns the payload if valid."""
+    try:
+        parts = token.split('.')
+        if len(parts) != 3:
+            return None # Invalid JWT format
+
+        encoded_header, encoded_payload, received_signature = parts
+
+        # Recompute signature
+        signing_input = f"{encoded_header}.{encoded_payload}".encode('utf-8')
+        expected_signature_bytes = hmac.new(secret, signing_input, hashlib.sha256).digest()
+        expected_signature = _base64url_encode(expected_signature_bytes)
+
+        if not hmac.compare_digest(received_signature.encode('utf-8'), expected_signature.encode('utf-8')):
+            return None # Signature mismatch
+
+        # Decode payload
+        payload_bytes = _base64url_decode(encoded_payload)
+        payload = json.loads(payload_bytes)
+
+        # Check expiration
+        if 'exp' in payload:
+            if datetime.utcfromtimestamp(payload['exp']) < datetime.utcnow():
+                print("Token expired.")
+                return None # Token expired
+
+        return payload
+    except Exception as e:
+        print(f"JWT verification error: {e}")
+        return None
+
+# --- Database Initialization ---
 
 def _init_db():
     """Initializes the SQLite database and creates tables if they don't exist."""
@@ -85,7 +150,6 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
         """Handle CORS preflight requests."""
         self._send_response(200)
 
-
     def _is_safe_path(self, path_segment):
         """
         Checks if a path segment is safe for use in a URL or query parameter.
@@ -101,15 +165,68 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
             return False
         return True
 
-    def _authenticate_request(self, username, password):
+    def _get_authenticated_username(self):
         """
-        Authenticates the request using the verify_user function from user_manager.
-        Returns True if authentication succeeds, False otherwise.
+        Extracts and verifies the JWT from the Authorization header.
+        Returns the username if valid, None otherwise.
         """
-        return verify_user(username, password)
+        auth_header = self.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            self._send_response(401, "application/json", json.dumps({"error": "Authentication required."}).encode('utf-8'))
+            return None
+
+        token = auth_header.split(' ')[1]
+        payload = _verify_jwt(token, SECRET_KEY)
+
+        if payload:
+            return payload.get('username')
+        else:
+            # _verify_jwt already handles sending 401 if token is invalid or expired
+            return None
+
+    def do_POST(self):
+        """Handles POST requests, specifically for login."""
+        parsed_path = urlparse(self.path)
+        path_segments = parsed_path.path.strip('/').split('/')
+
+        if len(path_segments) == 1 and path_segments[0] == "login":
+            try:
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length).decode('utf-8')
+                credentials = json.loads(post_data)
+                username = credentials.get('username')
+                password = credentials.get('password')
+
+                if not username or not password:
+                    self._send_response(400, "application/json", json.dumps({"error": "Username and password are required."}).encode('utf-8'))
+                    return
+
+                if verify_user(username, password):
+                    # Generate JWT payload
+                    token_payload = {
+                        'username': username,
+                        'exp': int(time.time() + 3600) # Token expires in 1 hour (Unix timestamp)
+                    }
+                    token = _generate_jwt(token_payload, SECRET_KEY)
+                    self._send_response(200, "application/json", json.dumps({"token": token, "username": username}).encode('utf-8'))
+                else:
+                    self._send_response(401, "application/json", json.dumps({"error": "Invalid credentials."}).encode('utf-8'))
+            except json.JSONDecodeError:
+                self._send_response(400, "application/json", json.dumps({"error": "Invalid JSON format."}).encode('utf-8'))
+            except Exception as e:
+                self._send_response(500, "application/json", json.dumps({"error": f"Server error during login: {e}"}).encode('utf-8'))
+        else:
+            # For other POST requests, if any, fall back to default or handle them
+            super().do_POST() # This might need more specific handling depending on future POST needs
+
 
     def do_PUT(self):
         """Handles PUT requests for saving task or milestone data."""
+        username = self._get_authenticated_username()
+        if not username:
+            # _get_authenticated_username already sends 401/500 response
+            return
+
         parsed_path = urlparse(self.path)
         path_segments = parsed_path.path.strip('/').split('/')
 
@@ -118,20 +235,6 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length).decode('utf-8')
             data = json.loads(post_data)
-
-            # Extract username and password from headers for authentication
-            auth_header = self.headers.get('Authorization')
-            if not auth_header or not auth_header.startswith('Basic '):
-                self._send_response(401, "application/json", json.dumps({"error": "Authentication required."}))
-                return
-
-            encoded_credentials = auth_header.split(' ')[1]
-            decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
-            username, password = decoded_credentials.split(':', 1)
-
-            if not self._authenticate_request(username, password):
-                self._send_response(401, "application/json", json.dumps({"error": "Invalid credentials."}))
-                return
 
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()
@@ -210,27 +313,19 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
         parsed_path = urlparse(self.path)
         path_segments = parsed_path.path.strip('/').split('/')
 
+        # Static files should not require authentication
+        if path_segments[0] not in ["load-task", "load-milestones", "load-milestone", "login"]:
+            super().do_GET()
+            return
+
+        # Authenticate all data retrieval endpoints
+        username = self._get_authenticated_username()
+        if not username:
+            # _get_authenticated_username already sends 401/500 response
+            return
+
         conn = None
         try:
-            # Check for authentication header for data retrieval endpoints
-            if path_segments[0] in ["load-task", "load-milestones", "load-milestone"]:
-                auth_header = self.headers.get('Authorization')
-                if not auth_header or not auth_header.startswith('Basic '):
-                    self._send_response(401, "application/json", json.dumps({"error": "Authentication required."}).encode('utf-8'))
-                    return
-
-                encoded_credentials = auth_header.split(' ')[1]
-                decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
-                username, password = decoded_credentials.split(':', 1)
-
-                if not self._authenticate_request(username, password):
-                    self._send_response(401, "application/json", json.dumps({"error": "Invalid credentials."}).encode('utf-8'))
-                    return
-            else:
-                # For all other GET requests (e.g., static files), no authentication needed
-                super().do_GET()
-                return
-
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()
 
@@ -315,8 +410,8 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
                     self._send_response(404, "application/json", json.dumps({"error": f"Milestone '{milestone_id}' for task '{task_id}' not found."}).encode('utf-8'))
 
             else:
-                # For all other GET requests, serve static files (e.g., HTML, JS)
-                super().do_GET()
+                self._send_response(404, "application/json", json.dumps({"error": "Endpoint not found."}).encode('utf-8'))
+
 
         except sqlite3.Error as e:
             self._send_response(500, "application/json", json.dumps({"error": f"Database error: {e}"}).encode('utf-8'))
@@ -328,24 +423,16 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_DELETE(self):
         """Handles DELETE requests for deleting tasks or milestones."""
+        username = self._get_authenticated_username()
+        if not username:
+            # _get_authenticated_username already sends 401/500 response
+            return
+
         parsed_path = urlparse(self.path)
         path_segments = parsed_path.path.strip('/').split('/')
 
         conn = None
         try:
-            auth_header = self.headers.get('Authorization')
-            if not auth_header or not auth_header.startswith('Basic '):
-                self._send_response(401, "application/json", json.dumps({"error": "Authentication required."}))
-                return
-
-            encoded_credentials = auth_header.split(' ')[1]
-            decoded_credentials = base64.b64decode(encoded_credentials).decode('utf-8')
-            username, password = decoded_credentials.split(':', 1)
-
-            if not self._authenticate_request(username, password):
-                self._send_response(401, "application/json", json.dumps({"error": "Invalid credentials."}))
-                return
-
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()
 
@@ -420,13 +507,15 @@ with socketserver.ThreadingTCPServer(("localhost", PORT), SimpleTaskServerHandle
     print(f"Serving HTTP on port {PORT}")
     print(f"Access static files at: http://localhost:{PORT}/")
     print(f"Task data will be stored in SQLite database: {os.path.abspath(DB_FILE)}")
-    print(f"To save a task (requires Basic Auth): PUT request to http://localhost:{PORT}/save-task/<task-id> with JSON body")
-    print(f"To save a milestone (requires Basic Auth): PUT request to http://localhost:{PORT}/save-milestone/<task-id>/<milestone-id> with JSON body")
-    print(f"To load a task (requires Basic Auth): GET request to http://localhost:{PORT}/load-task/<task-id>")
-    print(f"To load milestones (requires Basic Auth): GET request to http://localhost:{PORT}/load-milestones/<task-id>")
-    print(f"To load a single milestone (requires Basic Auth): GET request to http://localhost:{PORT}/load-milestone/<task-id>/<milestone-id>")
-    print(f"To delete a task (and its milestones, requires Basic Auth): DELETE request to http://localhost:{PORT}/delete-task/<task-id>")
-    print(f"To delete a milestone (requires Basic Auth): DELETE request to http://localhost:{PORT}/delete-milestone/<task-id>/<milestone-id>")
+    print(f"To save a task (requires JWT Auth): PUT request to http://localhost:{PORT}/save-task/<task-id> with JSON body")
+    print(f"To save a milestone (requires JWT Auth): PUT request to http://localhost:{PORT}/save-milestone/<task-id>/<milestone-id> with JSON body")
+    print(f"To load a task (requires JWT Auth): GET request to http://localhost:{PORT}/load-task/<task-id>")
+    print(f"To load milestones (requires JWT Auth): GET request to http://localhost:{PORT}/load-milestones/<task-id>")
+    print(f"To load a single milestone (requires JWT Auth): GET request to http://localhost:{PORT}/load-milestone/<task-id>/<milestone-id>")
+    print(f"To delete a task (and its milestones, requires JWT Auth): DELETE request to http://localhost:{PORT}/delete-task/<task-id>")
+    print(f"To delete a milestone (requires JWT Auth): DELETE request to http://localhost:{PORT}/delete-milestone/<task-id>/<milestone-id>")
+    print(f"To login and get a token: POST request to http://localhost:{PORT}/login with JSON body {'{'} \"username\": \"your_username\", \"password\": \"your_password\" {'}'}")
+
 
     try:
         httpd.serve_forever()
