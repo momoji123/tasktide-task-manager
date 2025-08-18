@@ -2,10 +2,11 @@
 // This module handles the detailed editing form for individual milestones,
 // including populating the form, saving changes, and deleting milestones.
 
-import { DB } from './storage.js';
+// import { DB } from './storage.js'; // DB is no longer needed for milestone operations
 import { Editor } from './editor.js'; // Assuming Editor is a separate module
 import { escapeHtml, showModalAlert, showModalAlertConfirm } from './utilUI.js';
-import { saveMilestoneToServer, deleteMilestoneFromServer, loadMilestoneFromServer } from './apiService.js'; // Import from centralized API service
+// Import from centralized API service
+import { saveMilestoneToServer, deleteMilestoneFromServer, loadMilestoneFromServer, loadTaskFromServer, loadMilestonesForTaskFromServer } from './apiService.js'; 
 
 // Internal state for global options and callbacks
 let statuses = [];
@@ -104,16 +105,26 @@ function updateButtonStates(editorArea) {
 
 /**
  * Opens the milestone editor for a given milestone.
- * @param {object} milestoneData - The milestone object (might be partial from IndexedDB).
+ * @param {object} milestoneData - The milestone object (might be partial or new).
  * @param {string} taskId - The ID of the parent task.
+ * @param {boolean} isNew - True if this is a new milestone being created.
  */
 export async function openMilestoneEditor(milestoneData, taskId, isNew = false) {
   currentTaskId = taskId; // Store the task ID
 
-  // Fetch the parent task to get its creator
-  const parentTask = await DB.getTask(taskId);
+  // Fetch the parent task from the server to get its creator
+  let parentTask = null;
+  try {
+      parentTask = await loadTaskFromServer(taskId); // Use centralized API service
+  } catch (error) {
+      console.error("Error fetching parent task for milestone editor:", error);
+      showModalAlert(`Cannot open milestone editor: Error loading parent task (${error.message}).`);
+      closeMilestoneEditor(); // Close editor if we can't get task creator
+      return;
+  }
+
   if (!parentTask || !parentTask.creator) {
-      showModalAlert('Cannot open milestone editor: Parent task not found or has no creator. Please save the task first.');
+      showModalAlert('Cannot open milestone editor: Parent task not found or has no creator. Please ensure the parent task is saved.');
       closeMilestoneEditor(); // Close editor if we can't get task creator
       return;
   }
@@ -121,19 +132,21 @@ export async function openMilestoneEditor(milestoneData, taskId, isNew = false) 
 
   // Fetch the full milestone data from the server to ensure notes are present
   let fullMilestone = null;
-  if (!isNew && currentUsername && taskId && milestoneData.id) {
-      fullMilestone = await loadMilestoneFromServer(taskId, milestoneData.id);
+  if (!isNew && milestoneData.id) { // Only attempt to load from server if it's an existing milestone
+      try {
+          fullMilestone = await loadMilestoneFromServer(taskId, milestoneData.id);
+      } catch (error) {
+          console.error("Error fetching full milestone details:", error);
+          showModalAlert('Failed to load full milestone details from server. Notes may not be available.');
+      }
   }
 
-  // If fetching from server fails or returns null, fallback to the provided milestoneData
-  // However, for notes, we strictly rely on server data as IndexedDB does not store them.
+  // If fetching from server fails or returns null for an existing milestone, fallback to provided data.
+  // For new milestones, use the provided milestoneData.
   if (!fullMilestone) {
-    if(!isNew){
-      showModalAlert('Failed to load full milestone details from server. Notes may not be available.');
-    }
-      fullMilestone = { ...milestoneData, notes: '' }; // Fallback, but clear notes if server fetch failed
+      fullMilestone = { ...milestoneData, notes: milestoneData.notes || '' }; // Ensure notes are at least an empty string
   }
-  currentMilestone = fullMilestone; // Set the currently selected milestone to the full server version
+  currentMilestone = fullMilestone; // Set the currently selected milestone to the full version
 
   if (updateCurrentMilestoneCallback) updateCurrentMilestoneCallback(currentMilestone); // Inform graph UI
 
@@ -157,17 +170,22 @@ export async function openMilestoneEditor(milestoneData, taskId, isNew = false) 
   milestoneEditorArea.appendChild(node);
 
   // Populate inputs with data from the fullMilestone object
-  milestoneEditorArea.querySelector(selectors.milestoneTitleInput).value = escapeHtml(currentMilestone.title);
+  milestoneEditorArea.querySelector(selectors.milestoneTitleInput).value = escapeHtml(currentMilestone.title || '');
   milestoneEditorArea.querySelector(selectors.milestoneDeadlineInput).value = currentMilestone.deadline ? currentMilestone.deadline.split('T')[0] : '';
   milestoneEditorArea.querySelector(selectors.milestoneFinishDateInput).value = currentMilestone.finishDate ? currentMilestone.finishDate.split('T')[0] : '';
 
   // Populate status dropdown
-  const statusSelect = milestoneEditorArea.querySelector(selectors.milestoneStatusSelect);
   renderStatusSelectOptions(milestoneEditorArea, statuses, currentMilestone.status);
 
   // Populate parent milestone dropdown
-  // Fetch milestones directly from the server for this task
-  const allMilestones = await DB.getMilestonesForTask(taskId); 
+  let allMilestones = [];
+  try {
+      allMilestones = await loadMilestonesForTaskFromServer(taskId); // Fetch all milestones for this task from the server
+  } catch (error) {
+      console.error("Error fetching all milestones for parent dropdown:", error);
+      showModalAlert('Failed to load all milestones for parent selection. Parent dropdown might be incomplete.');
+  }
+
   const parentSelect = milestoneEditorArea.querySelector(selectors.milestoneParentSelect);
   parentSelect.innerHTML = '<option value="">-- No Parent Milestone --</option>' + 
                            allMilestones
@@ -187,6 +205,7 @@ export async function openMilestoneEditor(milestoneData, taskId, isNew = false) 
   milestoneEditorArea.querySelector(selectors.closeMilestoneEditorBtn)?.addEventListener('click', closeMilestoneEditor); // Attach listener for the new close button
 
   // Deselect all bubbles then select the current one in the graph
+  // This operation is performed on the currently rendered graph, which is managed by milestoneGraphUI
   document.querySelectorAll('.milestone-bubble').forEach(b => b.classList.remove('selected'));
   const selectedBubble = document.querySelector(`.milestone-bubble[data-milestone-id="${currentMilestone.id}"]`);
   if (selectedBubble) {
@@ -215,14 +234,14 @@ function renderStatusSelectOptions(container, optionsArray, selectedValue) {
 
 
 /**
- * Saves the current milestone to IndexedDB and to the server.
+ * Saves the current milestone to the server.
  */
 async function saveMilestone() {
   if (!currentMilestone || !currentTaskId) return;
 
-  // Enforce username requirement and creator match
+  // Enforce username requirement
   if (!currentUsername) {
-      showModalAlert('Please login');
+      showModalAlert('Please login to save milestones.');
       return;
   }
 
@@ -237,7 +256,6 @@ async function saveMilestone() {
   currentMilestone.notes = (notesEditorInstance) ? notesEditorInstance.getHTML() : '';
   currentMilestone.updatedAt = new Date().toISOString();
 
-  await DB.putMilestone(currentMilestone); // Save to IndexedDB (notes excluded here, by design in DB module)
   try {
     await saveMilestoneToServer(currentMilestone, currentTaskId); // Use centralized API service to save full milestone including notes
     showModalAlert('Milestone saved!');
@@ -253,12 +271,12 @@ async function saveMilestone() {
         renderMilestoneBubblesCallback(currentTaskId, milestonesGraphContainer);
     }
   }
-  // Re-open editor to ensure dropdowns are re-rendered if global lists change and notes are re-fetched
+  // Re-open editor to ensure dropdowns are re-rendered and notes are re-fetched from server
   openMilestoneEditor(currentMilestone, currentTaskId);
 }
 
 /**
- * Deletes the current milestone from IndexedDB and from the server.
+ * Deletes the current milestone from the server.
  */
 async function deleteMilestone() {
   if (!currentMilestone || !currentTaskId) {
@@ -272,7 +290,16 @@ async function deleteMilestone() {
   }
 
   // Before deleting, check if this milestone is a parent to any other milestones
-  const allMilestones = await DB.getMilestonesForTask(currentTaskId);
+  // Fetch from server for the most up-to-date data
+  let allMilestones = [];
+  try {
+      allMilestones = await loadMilestonesForTaskFromServer(currentTaskId);
+  } catch (error) {
+      console.error("Error fetching milestones for parent check:", error);
+      showModalAlert('Failed to check milestone dependencies due to a server error. Cannot delete.');
+      return;
+  }
+
   const childrenMilestones = allMilestones.filter(m => m.parentId === currentMilestone.id);
 
   if (childrenMilestones.length > 0) {
@@ -284,7 +311,6 @@ async function deleteMilestone() {
 
   if (confirmed) {
     try {
-      await DB.deleteMilestone(currentMilestone.id); // Delete from IndexedDB
       await deleteMilestoneFromServer(currentMilestone.id, currentTaskId); // Use centralized API service
 
       currentMilestone = null; // Clear selected milestone

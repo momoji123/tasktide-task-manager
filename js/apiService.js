@@ -150,6 +150,37 @@ export async function loadTaskFromServer(taskId) {
 }
 
 /**
+ * Loads a summary of tasks from the server, applying provided filters and sorting.
+ * This endpoint is optimized for the left menu, returning only necessary fields.
+ * @param {object} filters - An object containing filter parameters (q, categories, statuses, sortBy, date ranges).
+ * @returns {Promise<object[]>} An array of summarized task objects.
+ */
+export async function loadTasksSummaryFromServer(filters = {}) {
+    try {
+        const params = new URLSearchParams();
+        if (filters.q) params.append('q', filters.q);
+        if (filters.categories && filters.categories.length > 0) params.append('categories', filters.categories.join(','));
+        if (filters.statuses && filters.statuses.length > 0) params.append('statuses', filters.statuses.join(','));
+        if (filters.sortBy) params.append('sortBy', filters.sortBy);
+        if (filters.createdRF) params.append('createdRF', filters.createdRF);
+        if (filters.createdRT) params.append('createdRT', filters.createdRT);
+        if (filters.updatedRF) params.append('updatedRF', filters.updatedRF);
+        if (filters.updatedRT) params.append('updatedRT', filters.updatedRT);
+        if (filters.deadlineRF) params.append('deadlineRF', filters.deadlineRF);
+        if (filters.deadlineRT) params.append('deadlineRT', filters.deadlineRT);
+        if (filters.finishedRF) params.append('finishedRF', filters.finishedRF);
+        if (filters.finishedRT) params.append('finishedRT', filters.finishedRT);
+
+        const url = `${API_BASE_URL}/load-tasks-summary?${params.toString()}`;
+        const response = await fetch(url, _withAuth());
+        return await handleApiResponse(response);
+    } catch (error) {
+        console.error('Failed to load task summaries from server:', error);
+        throw error;
+    }
+}
+
+/**
  * Sends task data to the Python server.
  * @param {object} task - The task object to save.
  */

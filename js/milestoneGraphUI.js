@@ -2,8 +2,9 @@
 // This module handles rendering the milestone graph (bubbles and SVG lines)
 // and related actions like opening the milestone editor or adding new milestones.
 
-import { DB } from './storage.js';
+// import { DB } from './storage.js'; // DB is no longer needed for milestone fetching
 import { escapeHtml } from './utilUI.js';
+import { loadMilestonesForTaskFromServer } from './apiService.js'; // Import the API service function
 
 // Internal state
 let currentMilestone = null; // Holds the currently selected milestone
@@ -73,7 +74,8 @@ export async function openMilestonesView(taskId, taskTitle) {
     if (openMilestoneEditorCallback) {
       openMilestoneEditorCallback(newMilestone, taskId, true);
     }
-    renderMilestoneBubbles(taskId, milestonesGraphContainer); // Re-render graph
+    // No explicit re-render here; the editor callback typically triggers a graph update after save
+    // renderMilestoneBubbles(taskId, milestonesGraphContainer); // Re-render graph
   });
 
   milestonesPage.querySelector(selectors.closeMilestonesView)?.addEventListener('click', () => {
@@ -136,7 +138,15 @@ function createEmptyMilestone(taskId) {
  */
 export async function renderMilestoneBubbles(taskId, containerEl) {
   containerEl.innerHTML = ''; // Clear existing bubbles and SVG
-  const milestones = await DB.getMilestonesForTask(taskId);
+  
+  let milestones = [];
+  try {
+    milestones = await loadMilestonesForTaskFromServer(taskId); // Fetch milestones from server
+  } catch (error) {
+    console.error("Error fetching milestones from server:", error);
+    containerEl.innerHTML = '<div class="error-message">Failed to load milestones. Please try again.</div>';
+    return;
+  }
 
   // If no milestones, show a placeholder and return
   if (milestones.length === 0) {

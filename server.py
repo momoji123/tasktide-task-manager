@@ -3,7 +3,7 @@ import socketserver
 import json
 import sqlite3
 import os
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 import hashlib
 import hmac
 import base64
@@ -263,7 +263,7 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
                     data.get('updatedAt')
                 ))
                 conn.commit()
-                self._send_response(200, "application/json", json.dumps({"message": f"Task '{task_id}' for user '{username}' saved successfully."}))
+                self._send_response(200, "application/json", json.dumps({"message": f"Task '{task_id}' for user '{username}' saved successfully."}).encode('utf-8'))
 
             # Save Milestone: /save-milestone/<task-id>/<milestone-id> (username now from auth)
             elif len(path_segments) == 3 and path_segments[0] == "save-milestone":
@@ -271,13 +271,13 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
                 milestone_id = path_segments[2]
 
                 if not self._is_safe_path(task_id) or not self._is_safe_path(milestone_id):
-                    self._send_response(400, "application/json", json.dumps({"error": "Invalid task ID or milestone ID. Input segments cannot contain '..', '.' or path separators."}))
+                    self._send_response(400, "application/json", json.dumps({"error": "Invalid task ID or milestone ID. Input segments cannot contain '..', '.' or path separators."}).encode('utf-8'))
                     return
 
                 # Ensure the task belongs to the authenticated user before saving its milestone
                 cursor.execute("SELECT id FROM tasks WHERE id = ? AND creator = ?", (task_id, username))
                 if not cursor.fetchone():
-                    self._send_response(403, "application/json", json.dumps({"error": f"Unauthorized: Task '{task_id}' not found or not owned by '{username}'."}))
+                    self._send_response(403, "application/json", json.dumps({"error": f"Unauthorized: Task '{task_id}' not found or not owned by '{username}'."}).encode('utf-8'))
                     return
 
 
@@ -294,34 +294,34 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
                     notes_json, data.get('updatedAt')
                 ))
                 conn.commit()
-                self._send_response(200, "application/json", json.dumps({"message": f"Milestone '{milestone_id}' for task '{task_id}' saved successfully."}))
+                self._send_response(200, "application/json", json.dumps({"message": f"Milestone '{milestone_id}' for task '{task_id}' saved successfully."}).encode('utf-8'))
             else:
-                self._send_response(404, "application/json", json.dumps({"error": "Endpoint not found."}))
+                self._send_response(404, "application/json", json.dumps({"error": "Endpoint not found."}).encode('utf-8'))
 
         except json.JSONDecodeError:
-            self._send_response(400, "application/json", json.dumps({"error": "Invalid JSON format."}))
+            self._send_response(400, "application/json", json.dumps({"error": "Invalid JSON format."}).encode('utf-8'))
         except sqlite3.Error as e:
-            self._send_response(500, "application/json", json.dumps({"error": f"Database error: {e}"}))
+            self._send_response(500, "application/json", json.dumps({"error": f"Database error: {e}"}).encode('utf-8'))
         except Exception as e:
-            self._send_response(500, "application/json", json.dumps({"error": f"Server error: {e}"}))
+            self._send_response(500, "application/json", json.dumps({"error": f"Server error: {e}"}).encode('utf-8'))
         finally:
             if conn:
                 conn.close()
 
     def do_GET(self):
-        """Handles GET requests for loading task or milestone data."""
+        """Handles GET requests for loading task or milestone data, including filtered task summaries."""
         parsed_path = urlparse(self.path)
         path_segments = parsed_path.path.strip('/').split('/')
 
         # Static files should not require authentication
-        if path_segments[0] not in ["load-task", "load-milestones", "load-milestone", "login"]:
+        if path_segments[0] not in ["load-task", "load-milestones", "load-milestone", "load-tasks-summary", "login"]:
             super().do_GET()
             return
 
         # Authenticate all data retrieval endpoints
         username = self._get_authenticated_username()
         if not username:
-            # _get_authenticated_username already sends 401/500 response
+            # _get_authenticated_username already handles sending 401/500 response
             return
 
         conn = None
@@ -329,8 +329,117 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()
 
+            # Load Task Summary (for left menu with filters): /load-tasks-summary
+            if len(path_segments) == 1 and path_segments[0] == "load-tasks-summary":
+                query_params = parse_qs(parsed_path.query)
+
+                search_query = query_params.get('q', [''])[0].lower()
+                selected_categories = query_params.get('categories', [''])[0].split(',')
+                selected_statuses = query_params.get('statuses', [''])[0].split(',')
+                sort_by = query_params.get('sortBy', ['updatedAt'])[0]
+                created_from = query_params.get('createdRF', [''])[0]
+                created_to = query_params.get('createdRT', [''])[0]
+                updated_from = query_params.get('updatedRF', [''])[0]
+                updated_to = query_params.get('updatedRT', [''])[0]
+                deadline_from = query_params.get('deadlineRF', [''])[0]
+                deadline_to = query_params.get('deadlineRT', [''])[0]
+                finished_from = query_params.get('finishedRF', [''])[0]
+                finished_to = query_params.get('finishedRT', [''])[0]
+
+                sql_query = """
+                    SELECT
+                        id, creator, title, "from", priority, deadline, finishDate, status, categories, updatedAt
+                    FROM
+                        tasks
+                    WHERE
+                        creator = ?
+                """
+                query_args = [username]
+
+                # Apply search filter
+                if search_query:
+                    sql_query += " AND (LOWER(title) LIKE ? OR LOWER(\"from\") LIKE ?)"
+                    query_args.extend([f'%{search_query}%', f'%{search_query}%'])
+
+                # Apply category filter
+                if selected_categories and selected_categories != ['']:
+                    category_conditions = []
+                    for cat in selected_categories:
+                        # Check if the JSON string of categories contains the selected category
+                        category_conditions.append(f"categories LIKE ?")
+                        query_args.append(f'%"{cat}"%') # For JSON array matching
+                    if category_conditions:
+                        sql_query += " AND (" + " OR ".join(category_conditions) + ")"
+
+                # Apply status filter
+                if selected_statuses and selected_statuses != ['']:
+                    status_placeholders = ','.join('?' * len(selected_statuses))
+                    sql_query += f" AND status IN ({status_placeholders})"
+                    query_args.extend(selected_statuses)
+
+                # Apply date filters
+                def add_date_filter(column_name, from_date, to_date):
+                    nonlocal sql_query, query_args
+                    if from_date and to_date:
+                        sql_query += f" AND {column_name} BETWEEN ? AND ?"
+                        query_args.extend([from_date, to_date + 'T23:59:59.999Z']) # Include full end day
+                    elif from_date:
+                        sql_query += f" AND {column_name} >= ?"
+                        query_args.append(from_date)
+                    elif to_date:
+                        sql_query += f" AND {column_name} <= ?"
+                        query_args.append(to_date + 'T23:59:59.999Z')
+
+                add_date_filter('createdAt', created_from, created_to)
+                add_date_filter('updatedAt', updated_from, updated_to)
+                add_date_filter('deadline', deadline_from, deadline_to)
+                # For finishDate, only include tasks with a finishDate if a range is provided
+                if finished_from or finished_to:
+                    if not finished_from and not finished_to: # If both empty, then all finished tasks.
+                        sql_query += " AND finishDate IS NOT NULL"
+                    elif finished_from and finished_to:
+                        sql_query += " AND finishDate BETWEEN ? AND ?"
+                        query_args.extend([finished_from, finished_to + 'T23:59:59.999Z'])
+                    elif finished_from:
+                        sql_query += " AND finishDate >= ?"
+                        query_args.append(finished_from)
+                    elif finished_to:
+                        sql_query += " AND finishDate <= ?"
+                        query_args.append(finished_to + 'T23:59:59.999Z')
+                # If neither finished_from nor finished_to are provided, we don't filter by finishedDate here.
+
+                # Apply sorting
+                order_clause = ""
+                if sort_by == 'deadline':
+                    order_clause = " ORDER BY CASE WHEN deadline IS NULL THEN 1 ELSE 0 END, deadline ASC"
+                elif sort_by == 'priority':
+                    order_clause = " ORDER BY priority ASC"
+                elif sort_by == 'from':
+                    order_clause = " ORDER BY \"from\" ASC"
+                else: # Default or 'updatedAt'
+                    order_clause = " ORDER BY updatedAt DESC"
+                
+                sql_query += order_clause
+                
+                cursor.execute(sql_query, query_args)
+                rows = cursor.fetchall()
+
+                tasks_summary = []
+                columns = [description[0] for description in cursor.description]
+                for row in rows:
+                    task_data = dict(zip(columns, row))
+                    if 'categories' in task_data and task_data['categories']:
+                        try:
+                            task_data['categories'] = json.loads(task_data['categories'])
+                        except json.JSONDecodeError:
+                            task_data['categories'] = [] # Handle malformed JSON
+                    tasks_summary.append(task_data)
+
+                self._send_response(200, "application/json", json.dumps(tasks_summary, indent=4).encode('utf-8'))
+
+
             # Load Task: /load-task/<task-id>
-            if len(path_segments) == 2 and path_segments[0] == "load-task":
+            elif len(path_segments) == 2 and path_segments[0] == "load-task":
                 task_id = path_segments[1]
 
                 if not self._is_safe_path(task_id):
@@ -441,19 +550,19 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
                 task_id = path_segments[1]
 
                 if not self._is_safe_path(task_id):
-                    self._send_response(400, "application/json", json.dumps({"error": "Invalid task ID. Input segments cannot contain '..', '.' or path separators."}))
+                    self._send_response(400, "application/json", json.dumps({"error": "Invalid task ID. Input segments cannot contain '..', '.' or path separators."}).encode('utf-8'))
                     return
 
                 # Verify ownership before deleting
                 cursor.execute("SELECT id FROM tasks WHERE id = ? AND creator = ?", (task_id, username))
                 if not cursor.fetchone():
-                    self._send_response(403, "application/json", json.dumps({"error": "Unauthorized: You can only delete tasks you created."}))
+                    self._send_response(403, "application/json", json.dumps({"error": "Unauthorized: You can only delete tasks you created."}).encode('utf-8'))
                     return
 
                 cursor.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
                 # Due to ON DELETE CASCADE, associated milestones will also be deleted
                 conn.commit()
-                self._send_response(200, "application/json", json.dumps({"message": f"Task '{task_id}' for user '{username}' deleted successfully."}))
+                self._send_response(200, "application/json", json.dumps({"message": f"Task '{task_id}' for user '{username}' deleted successfully."}).encode('utf-8'))
 
             # Delete Milestone: /delete-milestone/<task-id>/<milestone-id>
             elif len(path_segments) == 3 and path_segments[0] == "delete-milestone":
@@ -461,36 +570,36 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
                 milestone_id = path_segments[2]
 
                 if not self._is_safe_path(task_id) or not self._is_safe_path(milestone_id):
-                    self._send_response(400, "application/json", json.dumps({"error": "Invalid task ID or milestone ID. Input segments cannot contain '..', '.' or path separators."}))
+                    self._send_response(400, "application/json", json.dumps({"error": "Invalid task ID or milestone ID. Input segments cannot contain '..', '.' or path separators."}).encode('utf-8'))
                     return
 
                 # Verify task ownership before deleting milestone
                 cursor.execute("SELECT id FROM tasks WHERE id = ? AND creator = ?", (task_id, username))
                 if not cursor.fetchone():
-                    self._send_response(403, "application/json", json.dumps({"error": "Unauthorized: You can only delete milestones for tasks you created."}))
+                    self._send_response(403, "application/json", json.dumps({"error": "Unauthorized: You can only delete milestones for tasks you created."}).encode('utf-8'))
                     return
 
                 # Before deleting, check if this milestone is a parent to any other milestones
                 cursor.execute("SELECT id FROM milestones WHERE parentId = ?", (milestone_id,))
                 if cursor.fetchone():
-                    self._send_response(409, "application/json", json.dumps({"error": "Cannot delete milestone: it is a parent to other milestones. Please remove its children's parent link first."}))
+                    self._send_response(409, "application/json", json.dumps({"error": "Cannot delete milestone: it is a parent to other milestones. Please remove its children's parent link first."}).encode('utf-8'))
                     return
 
                 cursor.execute("DELETE FROM milestones WHERE id = ? AND taskId = ?", (milestone_id, task_id))
                 conn.commit()
                 if cursor.rowcount > 0:
-                    self._send_response(200, "application/json", json.dumps({"message": f"Milestone '{milestone_id}' for task '{task_id}' deleted successfully."}))
+                    self._send_response(200, "application/json", json.dumps({"message": f"Milestone '{milestone_id}' for task '{task_id}' deleted successfully."}).encode('utf-8'))
                 else:
-                    self._send_response(404, "application/json", json.dumps({"error": f"Milestone '{milestone_id}' for task '{task_id}' not found."}))
+                    self._send_response(404, "application/json", json.dumps({"error": f"Milestone '{milestone_id}' for task '{task_id}' not found."}).encode('utf-8'))
             else:
-                self._send_response(404, "application/json", json.dumps({"error": "Endpoint not found."}))
+                self._send_response(404, "application/json", json.dumps({"error": "Endpoint not found."}).encode('utf-8'))
 
         except json.JSONDecodeError:
-            self._send_response(400, "application/json", json.dumps({"error": "Invalid JSON format."}))
+            self._send_response(400, "application/json", json.dumps({"error": "Invalid JSON format."}).encode('utf-8'))
         except sqlite3.Error as e:
-            self._send_response(500, "application/json", json.dumps({"error": f"Database error: {e}"}))
+            self._send_response(500, "application/json", json.dumps({"error": f"Database error: {e}"}).encode('utf-8'))
         except Exception as e:
-            self._send_response(500, "application/json", json.dumps({"error": f"Server error: {e}"}))
+            self._send_response(500, "application/json", json.dumps({"error": f"Server error: {e}"}).encode('utf-8'))
         finally:
             if conn:
                 conn.close()
@@ -515,6 +624,8 @@ with socketserver.ThreadingTCPServer(("localhost", PORT), SimpleTaskServerHandle
     print(f"To delete a task (and its milestones, requires JWT Auth): DELETE request to http://localhost:{PORT}/delete-task/<task-id>")
     print(f"To delete a milestone (requires JWT Auth): DELETE request to http://localhost:{PORT}/delete-milestone/<task-id>/<milestone-id>")
     print(f"To login and get a token: POST request to http://localhost:{PORT}/login with JSON body {'{'} \"username\": \"your_username\", \"password\": \"your_password\" {'}'}")
+    # New endpoint for summarized tasks with filters
+    print(f"To load summarized tasks with filters (requires JWT Auth): GET request to http://localhost:{PORT}/load-tasks-summary?q=<query>&categories=<cat1,cat2>&statuses=<stat1,stat2>&sortBy=<field>&createdRF=<date>&createdRT=<date>&updatedRF=<date>&updatedRT=<date>&deadlineRF=<date>&deadlineRT=<date>&finishedRF=<date>&finishedRT=<date>")
 
 
     try:

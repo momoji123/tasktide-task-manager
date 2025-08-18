@@ -2,9 +2,11 @@
 // This module manages the left sidebar, including task list rendering,
 // search, filtering (category, status, date ranges), sorting, and grouping.
 
-import { DB } from './storage.js';
+// import { DB } from './storage.js'; // DB is no longer needed for task fetching
 import { escapeHtml } from './utilUI.js';
-import { loadTaskFromServer } from './apiService.js'; // Import from centralized API service
+// Import from centralized API service, including the new summary function
+import { loadTaskFromServer, loadTasksSummaryFromServer } from './apiService.js';
+import { DB } from './storage.js'; // Keep DB for persisting filter metadata
 
 // Internal state, initialized by the main UI module
 let categories = [];
@@ -143,7 +145,7 @@ export async function initLeftMenuTaskUI(initialState, onOpenEditor, onOpenViewe
     if (filterCategoryDropdownContent && !event.target.closest(selectors.filterCategoryMultiSelect) && filterCategoryDropdownContent.classList.contains('show')) {
       filterCategoryDropdownContent.classList.remove('show');
     }
-    if (filterStatusDropdownContent && !event.target.closest(selectors.filterFilterStatusMultiSelect) && filterStatusDropdownContent.classList.contains('show')) {
+    if (filterStatusDropdownContent && !event.target.closest(selectors.filterStatusMultiSelect) && filterStatusDropdownContent.classList.contains('show')) {
       filterStatusDropdownContent.classList.remove('show');
     }
   });
@@ -194,115 +196,50 @@ export function updateLeftMenuTaskUIState(updatedState) {
 
 /**
  * Renders the list of tasks based on current filters and sorting/grouping.
+ * Fetches data directly from the server API with applied filters.
  */
 export async function renderTaskList() {
-  const stack = new Error().stack;
-console.log(stack);
   const container = document.querySelector(selectors.taskList);
-  
-  
-  if (!container) return; // Ensure container exists
+  if (!container) return;
   container.innerHTML = ''; // Clear existing tasks to prevent duplication
-  const tasks = await DB.getAllTasks(); // These tasks are now partial (no description, notes, attachments)
-  const q = document.querySelector(selectors.searchInput)?.value.toLowerCase() || '';
-  // Removed old filterStat variable as it's replaced by selectedFilterStatuses
 
-  const sortVal = document.querySelector(selectors.sortBy)?.value || 'updatedAt';
+  // Collect all filter and sort values from UI elements
+  const filters = {
+    q: document.querySelector(selectors.searchInput)?.value || '',
+    categories: selectedFilterCategories,
+    statuses: selectedFilterStatuses,
+    sortBy: document.querySelector(selectors.sortBy)?.value || 'updatedAt',
+    createdRF: document.querySelector(selectors.createdRangeFrom)?.value,
+    createdRT: document.querySelector(selectors.createdRangeTo)?.value,
+    updatedRF: document.querySelector(selectors.updatedRangeFrom)?.value,
+    updatedRT: document.querySelector(selectors.updatedRangeTo)?.value,
+    deadlineRF: document.querySelector(selectors.deadlineRangeFrom)?.value,
+    deadlineRT: document.querySelector(selectors.deadlineRangeTo)?.value,
+    finishedRF: document.querySelector(selectors.finishedRangeFrom)?.value,
+    finishedRT: document.querySelector(selectors.finishedRangeTo)?.value,
+  };
+
+  // Fetch tasks directly from the server with filters
+  let tasks = [];
+  try {
+    tasks = await loadTasksSummaryFromServer(filters);
+  } catch (error) {
+    console.error("Error fetching tasks from server:", error);
+    // Display a user-friendly message in the task list area if fetching fails
+    container.innerHTML = '<div class="error-message">Failed to load tasks. Please try again or log in.</div>';
+    return;
+  }
+
   const groupVal = document.querySelector(selectors.groupBy)?.value || '__none';
 
-  // Get values for all new date range filters
-  const createdRF = document.querySelector(selectors.createdRangeFrom)?.value;
-  const createdRT = document.querySelector(selectors.createdRangeTo)?.value;
-  const updatedRF = document.querySelector(selectors.updatedRangeFrom)?.value;
-  const updatedRT = document.querySelector(selectors.updatedRangeTo)?.value;
-  const deadlineRF = document.querySelector(selectors.deadlineRangeFrom)?.value;
-  const deadlineRT = document.querySelector(selectors.deadlineRangeTo)?.value;
-  const finishedRF = document.querySelector(selectors.finishedRangeFrom)?.value;
-  const finishedRT = document.querySelector(selectors.finishedRangeTo)?.value;
-
-  let filtered = tasks.filter(t => {
-    // Search filter
-    // Note: Search will now only happen on title and 'from' field from IndexedDB.
-    // Full text search on description/notes would require fetching all tasks,
-    // which defeats the purpose of not storing them locally, or a server-side search API.
-    if (q && !(t.title?.toLowerCase().includes(q) || t.from?.toLowerCase().includes(q))) return false;
-    
-    // Category filter (multi-select)
-    // If selectedFilterCategories is empty, it means "select all" (no filter applied)
-    if (selectedFilterCategories.length > 0) {
-        const taskHasSelectedCategory = t.categories?.some(cat => selectedFilterCategories.includes(cat));
-        if (!taskHasSelectedCategory) return false;
-    }
-
-    // Status filter (multi-select)
-    // If selectedFilterStatuses.length is 0, it means "select all" (no filter applied)
-    if (selectedFilterStatuses.length > 0) {
-        if (!selectedFilterStatuses.includes(t.status)) return false;
-    }
-    
-    // Date filters (adjusting endDate to include the whole day)
-    const checkDateRange = (taskDateStr, fromDateStr, toDateStr) => {
-      if (!taskDateStr) return false;
-      const taskDate = new Date(taskDateStr);
-      if (fromDateStr && taskDate < new Date(fromDateStr)) return false;
-      if (toDateStr) {
-        const toDate = new Date(toDateStr);
-        toDate.setDate(toDate.getDate() + 1); // Set to next day 00:00:00 to include the full 'to' day
-        if (taskDate >= toDate) return false;
-      }
-      return true;
-    };
-
-    if ((createdRF || createdRT) && !checkDateRange(t.createdAt, createdRF, createdRT)) return false;
-    if ((updatedRF || updatedRT) && !checkDateRange(t.updatedAt, updatedRF, updatedRT)) return false;
-    if ((deadlineRF || deadlineRT) && !checkDateRange(t.deadline, deadlineRF, deadlineRT)) return false;
-    // For finishDate, specifically handle null values for unfinished tasks
-    if ((finishedRF || finishedRT)) {
-      if (!t.finishDate || !checkDateRange(t.finishDate, finishedRF, finishedRT)) return false;
-    }
-
-    return true;
-  });
-
-  // Grouping logic
+  // Grouping logic (still done client-side as server only provides sorted flat list)
   if (groupVal === '__none') {
-      // No grouping, just sort and render
-      filtered.sort((a, b) => {
-          if (sortVal === 'deadline') {
-            // Sort deadline: null/empty to the end
-            const deadlineA = a.deadline || null;
-            const deadlineB = b.deadline || null;
-
-            if (deadlineA === null && deadlineB === null) return 0;
-            if (deadlineA === null) return 1; // a is null, b is not, so a comes after b
-            if (deadlineB === null) return -1; // b is null, a is not, so a comes before b
-            return deadlineA.localeCompare(deadlineB);
-          }
-          if (sortVal === 'priority') return a.priority - b.priority;
-          if (sortVal === 'from') {
-            // Sort from: null/empty to the end
-            const fromA = a.from || null;
-            const fromB = b.from || null;
-
-            if (fromA === null && fromB === null) return 0;
-            if (fromA === null) return 1;
-            if (fromB === null) return -1;
-            return fromA.localeCompare(fromB);
-          }
-          // Default sort by updated at descending, null/empty to the end
-          const updatedAtA = a.updatedAt || null;
-          const updatedAtB = b.updatedAt || null;
-
-          if (updatedAtA === null && updatedAtB === null) return 0;
-          if (updatedAtA === null) return 1;
-          if (updatedAtB === null) return -1;
-          return updatedAtB.localeCompare(updatedAtA);
-      });
-      renderTaskItems(container, filtered);
+      // No grouping, just render the already sorted tasks from the server
+      renderTaskItems(container, tasks);
   } else {
       const groupedTasks = {};
       
-      filtered.forEach(task => {
+      tasks.forEach(task => {
           if (groupVal === 'category' && task.categories && task.categories.length > 0) {
               // If grouping by category and task has multiple categories, add to each group
               task.categories.forEach(category => {
@@ -405,37 +342,9 @@ console.log(stack);
               }
           });
 
-          // Sort tasks within each group
-          groupedTasks[groupKey].sort((a, b) => {
-              if (sortVal === 'deadline') {
-                const deadlineA = a.deadline || null;
-                const deadlineB = b.deadline || null;
-
-                if (deadlineA === null && deadlineB === null) return 0;
-                if (deadlineA === null) return 1;
-                if (deadlineB === null) return -1;
-                return deadlineA.localeCompare(deadlineB);
-              }
-              if (sortVal === 'priority') return a.priority - b.priority;
-              if (sortVal === 'from') {
-                const fromA = a.from || null;
-                const fromB = b.from || null;
-
-                if (fromA === null && fromB === null) return 0;
-                if (fromA === null) return 1;
-                if (fromB === null) return -1;
-                return fromA.localeCompare(fromB);
-              }
-              // Default sort by updatedAt descending, null/empty to the end
-              const updatedAtA = a.updatedAt || null;
-              const updatedAtB = b.updatedAt || null;
-
-              if (updatedAtA === null && updatedAtB === null) return 0;
-              if (updatedAtA === null) return 1;
-              if (updatedAtB === null) return -1;
-              return updatedAtB.localeCompare(updatedAtA);
-          });
-
+          // Tasks within each group are already sorted by the server's main sort.
+          // If a secondary sort is needed within groups (which is not handled by current server API),
+          // it would be done here client-side. For now, rely on server sort for overall list.
           renderTaskItems(groupContentDiv, groupedTasks[groupKey]);
       });
   }
@@ -485,8 +394,10 @@ function renderTaskItems(container, tasksToRender) {
       currentSelectedTaskId = t.id;
       
       let fullTask = t;
-      // Only attempt to load if it has a creator and missing full details
-      if (t.creator && (!t.description || !t.notes || !t.attachments)) {
+      // Only attempt to load if it has a creator. The assumption is that
+      // the summary tasks don't have description, notes, attachments,
+      // so we always need to load the full task when clicked.
+      if (t.creator) {
           fullTask = await loadTaskFromServer(t.id) || t; // Use centralized API service
       }
 

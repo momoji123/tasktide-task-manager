@@ -2,7 +2,7 @@
 // This module manages the main task editing area, including displaying,
 // saving, deleting tasks, and handling task-specific categories and attachments.
 
-import { DB } from './storage.js';
+// import { DB } from './storage.js'; // DB is no longer needed for task operations
 import { Editor } from './editor.js';
 import { escapeHtml, showModalAlert, showModalAlertConfirm } from './utilUI.js';
 import { loadTaskFromServer, saveTaskToServer, deleteTaskFromServer } from './apiService.js'; // Import from centralized API service
@@ -100,17 +100,19 @@ function updateButtonStates(editorContainer) {
 
   // Buttons are enabled only if a username is set AND the task's creator matches
   // or the task has no creator (meaning it's a new task that the current user will create)
-  const canEditOrDelete = !!(currentUsername); // Added !! to ensure boolean
+  // If no currentUsername, all operations are disabled as authentication is required
+  const canEditOrDelete = !!currentUsername && (currentTask && currentTask.creator === currentUsername || !currentTask.creator);
 
   if (saveBtn) {
     saveBtn.disabled = !canEditOrDelete;
   }
   if (deleteBtn) {
-    deleteBtn.disabled = !canEditOrDelete;
+    // Delete is only enabled if the task exists and the current user is the creator
+    deleteBtn.disabled = !(currentUsername && currentTask && currentTask.creator === currentUsername);
   }
   if (openMilestonesBtn) {
-    // Milestones can only be opened if a username is set and the task has a creator
-    openMilestonesBtn.disabled = !currentUsername || !currentTask.creator; 
+    // Milestones can only be opened if a username is set and the task has been saved (has a creator)
+    openMilestonesBtn.disabled = !currentUsername || !currentTask || !currentTask.creator; 
   }
 
   // Set editability for rich text areas using their instances
@@ -141,25 +143,33 @@ function updateButtonStates(editorContainer) {
 /**
  * Opens the task editor for a given task.
  * @param {object} task - The task object to edit.
+ * @param {boolean} isNewTask - True if this is a new task being created.
  */
 export async function openTaskEditor(task, isNewTask = false) {
-  // If description, notes, or attachments are missing, fetch the full task from the server
-  if (!isNewTask && (!task.description || !task.notes || !task.attachments)) {
-      if (!task.creator) {
-          showModalAlert('Cannot load full task details: Task creator is not set. Please save the task first if it\'s new, or ensure your username is set if it\'s an existing task.');
-          return;
+  let fetchedTask = task; // Start with the provided task (could be a summary)
+
+  // Always fetch the full task details from the server if it's an existing task,
+  // to ensure we have description, notes, and attachments.
+  if (!isNewTask && task.id) {
+      try {
+          // If task.creator is needed for auth, and not present, loadTaskFromServer might fail.
+          // The server handles the creator check based on the JWT.
+          const fullTask = await loadTaskFromServer(task.id);
+          if (fullTask) {
+              fetchedTask = fullTask;
+          } else {
+              showModalAlert('Failed to load full task details from server. Displaying partial data.');
+              // Fallback to the partial task if server load fails, but acknowledge notes/desc might be missing
+              fetchedTask = { ...task, description: '', notes: '', attachments: [] }; 
+          }
+      } catch (error) {
+          console.error("Error fetching full task for editor:", error);
+          showModalAlert(`Error loading task details: ${error.message}. Displaying partial data.`);
+          // Fallback to the partial task if server load fails
+          fetchedTask = { ...task, description: '', notes: '', attachments: [] };
       }
-      const fullTask = await loadTaskFromServer(task.id); // Use centralized API service
-      if (fullTask) {
-          currentTask = fullTask; // Use the full task from the server
-      } else {
-          // If server load failed, perhaps show an error and return, or use the partial task
-          showModalAlert('Failed to load full task details from server. Displaying partial data.');
-          currentTask = task; // Fallback to partial task if server load fails
-      }
-  } else {
-      currentTask = task; // Use the provided task if it's already complete
   }
+  currentTask = fetchedTask;
 
   const editorArea = document.querySelector(selectors.editorArea);
   if (!editorArea) return;
@@ -196,11 +206,11 @@ export async function openTaskEditor(task, isNewTask = false) {
         <!-- Close button removed from here, now placed beside Save/Delete -->
       </div>
       <div class="label">Title</div>
-      <input id="taskTitle" value="${escapeHtml(currentTask.title)}">
+      <input id="taskTitle" value="${escapeHtml(currentTask.title || '')}">
       <div class="label">From</div>
       <select id="taskFrom"></select>
       <div class="label">Priority (1-high,5-low)</div>
-      <input id="taskPriority" type="number" min="1" max="5" value="${currentTask.priority}">
+      <input id="taskPriority" type="number" min="1" max="5" value="${currentTask.priority || 3}">
       <div class="date-inputs">
         <div>
           <div class="label">Deadline</div>
@@ -327,7 +337,7 @@ function renderStatusOptions(container) {
 }
 
 /**
- * Saves the current task to IndexedDB and to the server.
+ * Saves the current task to the server.
  */
 async function saveTask() {
   if (!currentTask) return;
@@ -356,14 +366,12 @@ async function saveTask() {
       currentTask.creator = currentUsername;
   } 
 
-  await DB.putTask(currentTask); // Save to IndexedDB (this will now only save partial task)
   try {
-    await saveTaskToServer(currentTask, currentTask.creator); // Use centralized API service
+    await saveTaskToServer(currentTask); // Use centralized API service
     showModalAlert('Task saved!');
   } catch (error) {
     showModalAlert(`Error saving task: ${error.message}`);
   }
-
 
   if (renderTaskListCallback) await renderTaskListCallback(); // Re-render task list
   // After saving, go back to view mode
@@ -376,7 +384,7 @@ async function saveTask() {
 }
 
 /**
- * Deletes the current task from IndexedDB and server.
+ * Deletes the current task from the server.
  */
 async function deleteTask() {
   if (!currentTask) return;
@@ -391,8 +399,7 @@ async function deleteTask() {
 
   if (confirmed) {
     try {
-      await DB.deleteTask(currentTask.id); // Delete from IndexedDB
-      await deleteTaskFromServer(currentTask.id, currentTask.creator); // Use centralized API service
+      await deleteTaskFromServer(currentTask.id); // Use centralized API service
 
       // Call clearEditorArea to reset the UI safely
       clearEditorArea();
@@ -420,8 +427,9 @@ function renderCategoryTags() {
     // Disable remove button if current user is not the creator or no username is set
     const removeButton = tag.querySelector('button');
     if (removeButton) {
-      removeButton.disabled = !currentUsername || currentTask.creator !== currentUsername;
-      if (!removeButton.disabled) {
+      const canEdit = currentUsername && currentTask.creator === currentUsername;
+      removeButton.disabled = !canEdit;
+      if (canEdit) {
         removeButton.addEventListener('click', () => {
           currentTask.categories.splice(idx, 1);
           renderCategoryTags();
@@ -498,17 +506,17 @@ export function clearEditorArea() {
 
   // Hide viewer and editor explicitly if they exist
   if (viewerElement) {
-      viewerElement.style.display = 'none';
+    viewerElement.style.display = 'none';
   }
   if (editorElement) {
-      editorElement.style.display = 'none';
+    editorElement.style.display = 'none';
   }
 
   // Show the placeholder, or create it if it doesn't exist (e.g., if editorArea was empty)
   if (placeholderElement) {
-      placeholderElement.style.display = 'block';
+    placeholderElement.style.display = 'block';
   } else {
-      document.querySelector(selectors.editorArea).innerHTML = '<div class="placeholder">Select or create a task to view/edit details</div>';
+    document.querySelector(selectors.editorArea).innerHTML = '<div class="placeholder">Select or create a task to view/edit details</div>';
   }
   currentTask = null;
   // Clear editor instances when clearing the area
