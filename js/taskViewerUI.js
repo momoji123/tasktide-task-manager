@@ -19,6 +19,7 @@ const selectors = {
   viewTaskDeadline: '#viewTaskDeadline',
   viewTaskFinishDate: '#viewTaskFinishDate',
   viewTaskStatus: '#viewTaskStatus',
+  viewTaskCreator: '#viewTaskCreator',
   viewDescContent: '#viewDescContent',
   viewNotesContent: '#viewNotesContent',
   viewCategoryList: '#viewCategoryList',
@@ -78,6 +79,7 @@ export async function openTaskViewer(task, isNewTask = false) {
   viewerArea.querySelector(selectors.viewTaskDeadline).textContent = currentTask.deadline ? new Date(currentTask.deadline).toLocaleDateString() : 'No Deadline';
   viewerArea.querySelector(selectors.viewTaskFinishDate).textContent = currentTask.finishDate ? new Date(currentTask.finishDate).toLocaleDateString() : 'Not Finished';
   viewerArea.querySelector(selectors.viewTaskStatus).textContent = currentTask.status || 'N/A';
+  viewerArea.querySelector(selectors.viewTaskCreator).textContent = currentTask.creator || 'N/A';
 
   // Render rich text content
   const descContent = viewerArea.querySelector(selectors.viewDescContent);
