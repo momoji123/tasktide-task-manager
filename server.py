@@ -205,7 +205,7 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
                     # Generate JWT payload
                     token_payload = {
                         'username': username,
-                        'exp': int(time.time() + 3600) # Token expires in 1 hour (Unix timestamp)
+                        'exp': int(time.time() + 3600 * 24 * 30) # Token expires in 1 Month (Unix timestamp)
                     }
                     token = _generate_jwt(token_payload, SECRET_KEY)
                     self._send_response(200, "application/json", json.dumps({"token": token, "username": username}).encode('utf-8'))

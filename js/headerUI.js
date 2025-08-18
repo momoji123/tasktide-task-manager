@@ -6,6 +6,7 @@ import { DB } from './storage.js';
 import { escapeHtml, showModalAlert, showModalAlertConfirm } from './utilUI.js';
 // Import the new functions for login, logout, and getting authenticated username
 import { login, logout, getAuthenticatedUsername, initAuth, saveTaskToServer, saveMilestoneToServer, loadTasksSummaryFromServer, loadTaskFromServer, loadMilestonesForTaskFromServer } from './apiService.js';
+import { renderTaskList } from './leftMenuTaskUI.js';
 
 // Internal state, initialized by the main UI module
 let categories = [];
@@ -399,10 +400,9 @@ async function manageAuthentication(onUpdateUsernameCallback) {
   if (logoutConfirmBtn) {
     logoutConfirmBtn.addEventListener('click', async () => {
         logout(); // Call apiService logout
-        // No longer need to clear from IndexedDB if username is purely server-managed
-        // await DB.putMeta('username', null);
         username = null; // Update local state
         if (onUpdateUsernameCallback) onUpdateUsernameCallback(null); // Update global UI state
+        renderTaskList(); // Re-render task list after logout
         showModalAlert('Logged out successfully.');
         modalBackdrop.remove(); // Close modal
     });
@@ -443,6 +443,7 @@ async function manageAuthentication(onUpdateUsernameCallback) {
             // await DB.putMeta('username', loginResult.username);
             username = loginResult.username; // Update local state
             if (onUpdateUsernameCallback) onUpdateUsernameCallback(username); // Update global UI state
+            renderTaskList(); // Re-render task list after login
             showModalAlert('Login successful!');
             cleanupAndResolve(true);
         } catch (error) {
