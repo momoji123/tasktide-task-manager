@@ -2,9 +2,7 @@
 // This module manages the left sidebar, including task list rendering,
 // search, filtering (category, status, date ranges), sorting, and grouping.
 
-// import { DB } from './storage.js'; // DB is no longer needed for task fetching
 import { escapeHtml } from './utilUI.js';
-// Import from centralized API service, including the new summary function
 import { loadTaskFromServer, loadTasksSummaryFromServer } from './apiService.js';
 import { DB } from './storage.js'; // Keep DB for persisting filter metadata
 
@@ -13,10 +11,9 @@ let categories = [];
 let statuses = [];
 let filterSectionVisible = true;
 let selectedFilterCategories = [];
-let selectedFilterStatuses = []; // New state for multi-select status filter
-// Renamed and added new callbacks for clarity and specific routing
-let openTaskEditorFn = null; // Callback to open the task editor (for new tasks or editing existing)
-let openTaskViewerFn = null; // Callback to open the task viewer (for viewing existing tasks)
+let selectedFilterStatuses = [];
+let openTaskEditorFn = null;
+let openTaskViewerFn = null;
 let currentSelectedTaskId = null; // New state to hold the ID of the currently selected task
 let currentUsername = null; // To get the current user's username for loading tasks
 
@@ -29,7 +26,6 @@ const selectors = {
   selectedFilterCategoriesDisplay: '#selectedFilterCategoriesDisplay',
   filterCategoryDropdownContent: '#filterCategoryDropdownContent',
   
-  // New selectors for multi-select status filter
   filterStatusMultiSelect: '#filterStatusMultiSelect',
   filterStatusHeader: '#filterStatusMultiSelect .multi-select-header',
   selectedFilterStatusesDisplay: '#selectedFilterStatusesDisplay',
@@ -48,8 +44,8 @@ const selectors = {
   toggleFilterBtn: '#toggleFilterBtn',
   filterSection: '#filterSection',
   filterColumn: '#filterColumn',
-  appContainer: '#app', // Added for mobile UX
-  sidebar: '.sidebar', // Added for mobile UX
+  appContainer: '#app',
+  sidebar: '.sidebar',
 };
 
 /**
@@ -58,36 +54,39 @@ const selectors = {
  * @param {function} onOpenEditor - Callback function to open the task editor.
  * @param {function} onOpenViewer - Callback function to open the task viewer.
  */
-export async function initLeftMenuTaskUI(initialState, onOpenEditor, onOpenViewer) { // CHANGED: Added onOpenViewer
+export async function initLeftMenuTaskUI(initialState, onOpenEditor, onOpenViewer) {
   categories = initialState.categories;
   statuses = initialState.statuses;
   filterSectionVisible = initialState.filterSectionVisible;
   selectedFilterCategories = initialState.selectedFilterCategories;
   selectedFilterStatuses = initialState.selectedFilterStatuses || []; 
-  currentUsername = initialState.username; // Initialize username
+  currentUsername = initialState.username;
 
-  // Assign the passed-in functions to the internal module variables
-  openTaskEditorFn = onOpenEditor; // Stores the editor callback
-  openTaskViewerFn = onOpenViewer; // Stores the viewer callback
-
-  // Apply initial filter section visibility state
   const appContainer = document.querySelector(selectors.appContainer);
   if (appContainer) {
     appContainer.classList.toggle('filter-active', filterSectionVisible);
   }
 
-  // Set up event listeners for inputs
+  // Assign the passed-in functions to the internal module variables
+  openTaskEditorFn = onOpenEditor;
+  openTaskViewerFn = onOpenViewer;
+
   document.querySelector(selectors.newTaskBtn)?.addEventListener('click', () => {
     // Clear current selected task when creating a new one
     currentSelectedTaskId = null;
+    // Remove selected class from any previously selected task item
+    const previouslySelected = document.querySelector('.selected-task-item');
+    if (previouslySelected) {
+      previouslySelected.classList.remove('selected-task-item');
+    }
 
     const id = 't_' + Date.now();
     const emptyTask = {
       id,
       title: 'Untitled',
-      description: '', // These will be filled by the editor and saved to server
-      notes: '',       // but not saved to IndexedDB
-      attachments: [], //
+      description: '',
+      notes: '',
+      attachments: [],
       priority: 3,
       deadline: null,
       finishDate: null,
@@ -98,11 +97,9 @@ export async function initLeftMenuTaskUI(initialState, onOpenEditor, onOpenViewe
       updatedAt: new Date().toISOString(),
       creator: currentUsername
     };
-    // When New Task button is clicked, directly open the TaskEditorUI
-    if (openTaskEditorFn) { // Use the dedicated editor function
-        openTaskEditorFn(emptyTask, true); // Pass true for isNewTask
+    if (openTaskEditorFn) {
+        openTaskEditorFn(emptyTask, true);
     }
-    renderTaskList(); // Re-render task list to update selection highlight (if any)
   });
 
   // Event listeners for filters and sorting
@@ -118,29 +115,26 @@ export async function initLeftMenuTaskUI(initialState, onOpenEditor, onOpenViewe
   document.querySelector(selectors.sortBy)?.addEventListener('change', renderTaskList);
   document.querySelector(selectors.groupBy)?.addEventListener('change', renderTaskList);
 
-  // Multi-select Category Filter Event Listeners
   const filterCategoryHeader = document.querySelector(selectors.filterCategoryHeader);
   const filterCategoryDropdownContent = document.querySelector(selectors.filterCategoryDropdownContent);
 
   if (filterCategoryHeader) {
     filterCategoryHeader.addEventListener('click', (event) => {
       filterCategoryDropdownContent?.classList.toggle('show');
-      event.stopPropagation(); // Prevent closing immediately
+      event.stopPropagation();
     });
   }
 
-  // Multi-select Status Filter Event Listeners
   const filterStatusHeader = document.querySelector(selectors.filterStatusHeader);
   const filterStatusDropdownContent = document.querySelector(selectors.filterStatusDropdownContent);
 
   if (filterStatusHeader) {
     filterStatusHeader.addEventListener('click', (event) => {
       filterStatusDropdownContent?.classList.toggle('show');
-      event.stopPropagation(); // Prevent closing immediately
+      event.stopPropagation();
     });
   }
 
-  // Close all multi-select dropdowns if clicked outside
   window.addEventListener('click', (event) => {
     if (filterCategoryDropdownContent && !event.target.closest(selectors.filterCategoryMultiSelect) && filterCategoryDropdownContent.classList.contains('show')) {
       filterCategoryDropdownContent.classList.remove('show');
@@ -150,7 +144,6 @@ export async function initLeftMenuTaskUI(initialState, onOpenEditor, onOpenViewe
     }
   });
 
-  // Filter section toggle
   const toggleFilterBtn = document.querySelector(selectors.toggleFilterBtn);
   const filterColumn = document.querySelector(selectors.filterColumn);
 
@@ -158,13 +151,12 @@ export async function initLeftMenuTaskUI(initialState, onOpenEditor, onOpenViewe
     toggleFilterBtn.addEventListener('click', async () => {
       filterSectionVisible = !filterSectionVisible;
       appContainer.classList.toggle('filter-active', filterSectionVisible);
-      await DB.putMeta('filterSectionVisible', filterSectionVisible); // Save state
+      await DB.putMeta('filterSectionVisible', filterSectionVisible);
     });
   }
 
-  // Initial rendering
   renderFilterCategoriesMultiSelect();
-  renderFilterStatusMultiSelect(); // Render the new status multi-select
+  renderFilterStatusMultiSelect();
   await renderTaskList();
 }
 
@@ -179,19 +171,17 @@ export function updateLeftMenuTaskUIState(updatedState) {
   if (updatedState.filterSectionVisible !== undefined) filterSectionVisible = updatedState.filterSectionVisible;
   if (updatedState.selectedFilterCategories) selectedFilterCategories = updatedState.selectedFilterCategories;
   if (updatedState.selectedFilterStatuses) selectedFilterStatuses = updatedState.selectedFilterStatuses;
-  if (updatedState.username !== undefined) currentUsername = updatedState.username; // Update username
+  if (updatedState.username !== undefined) currentUsername = updatedState.username;
 
-  // Also update currentSelectedTaskId if it's part of the updatedState, though it usually comes from openTaskEditorCallback
   if (updatedState.currentSelectedTaskId !== undefined) currentSelectedTaskId = updatedState.currentSelectedTaskId;
   
-  // Re-apply visibility and re-render filters if state changes
   const appContainer = document.querySelector(selectors.appContainer);
   if (appContainer) {
     appContainer.classList.toggle('filter-active', filterSectionVisible);
   }
   renderFilterCategoriesMultiSelect();
-  renderFilterStatusMultiSelect(); // Re-render the new status multi-select
-  renderTaskList(); // Re-render task list after state changes
+  renderFilterStatusMultiSelect();
+  renderTaskList();
 }
 
 /**
@@ -201,9 +191,8 @@ export function updateLeftMenuTaskUIState(updatedState) {
 export async function renderTaskList() {
   const container = document.querySelector(selectors.taskList);
   if (!container) return;
-  container.innerHTML = ''; // Clear existing tasks to prevent duplication
+  container.innerHTML = '';
 
-  // Collect all filter and sort values from UI elements
   const filters = {
     q: document.querySelector(selectors.searchInput)?.value || '',
     categories: selectedFilterCategories,
@@ -219,35 +208,29 @@ export async function renderTaskList() {
     finishedRT: document.querySelector(selectors.finishedRangeTo)?.value,
   };
 
-  // Fetch tasks directly from the server with filters
   let tasks = [];
   try {
     tasks = await loadTasksSummaryFromServer(filters);
   } catch (error) {
     console.error("Error fetching tasks from server:", error);
-    // Display a user-friendly message in the task list area if fetching fails
     container.innerHTML = '<div class="error-message">Failed to load tasks. Please try again or log in.</div>';
     return;
   }
 
   const groupVal = document.querySelector(selectors.groupBy)?.value || '__none';
 
-  // Grouping logic (still done client-side as server only provides sorted flat list)
   if (groupVal === '__none') {
-      // No grouping, just render the already sorted tasks from the server
       renderTaskItems(container, tasks);
   } else {
       const groupedTasks = {};
       
       tasks.forEach(task => {
           if (groupVal === 'category' && task.categories && task.categories.length > 0) {
-              // If grouping by category and task has multiple categories, add to each group
               task.categories.forEach(category => {
                   const groupKey = category || 'No Category';
                   if (!groupedTasks[groupKey]) {
                       groupedTasks[groupKey] = [];
                   }
-                  // Avoid duplicate tasks if they appear multiple times due to other filters
                   if (!groupedTasks[groupKey].some(t => t.id === task.id)) {
                       groupedTasks[groupKey].push(task);
                   }
@@ -293,11 +276,8 @@ export async function renderTaskList() {
           }
       });
 
-      // Sort group keys
       const sortedGroupKeys = Object.keys(groupedTasks).sort((a, b) => {
-          // Special handling for date groups to sort numerically
           if (groupVal.includes('MonthYear')) {
-              // For month-year, parse to date objects for proper sorting
               const dateA = new Date(a);
               const dateB = new Date(b);
               if (!isNaN(dateA.getTime()) && !isNaN(dateB.getTime())) return dateA.getTime() - dateB.getTime();
@@ -306,45 +286,37 @@ export async function renderTaskList() {
               const yearB = parseInt(b.replace(/\D/g, ''), 10);
               if (!isNaN(yearA) && !isNaN(yearB)) return yearA - yearB;
           } else if (groupVal === 'priority') {
-              // Extract priority number for sorting
               const pA = parseInt(a.replace('Priority ', ''), 10);
               const pB = parseInt(b.replace('Priority ', ''), 10);
               if (!isNaN(pA) && !isNaN(pB)) return pA - pB;
           }
-          // Default alphabetical sort for other keys, with 'No X' last
           if (a.startsWith('No ')) return 1;
           if (b.startsWith('No ')) return -1;
           return a.localeCompare(b);
       });
 
-      // Render grouped tasks with collapsible sections
       sortedGroupKeys.forEach(groupKey => {
           const groupHeaderDiv = document.createElement('div');
           groupHeaderDiv.className = 'group-header';
           groupHeaderDiv.innerHTML = `
               <h4>${escapeHtml(groupKey)}</h4>
               <button class="toggle-group-btn" data-group-key="${escapeHtml(groupKey)}">&#9660;</button>
-          `; // Down arrow initially
-
+          `;
           const groupContentDiv = document.createElement('div');
-          groupContentDiv.className = 'group-content show'; // Initially show content
+          groupContentDiv.className = 'group-content show';
 
           container.appendChild(groupHeaderDiv);
           container.appendChild(groupContentDiv);
 
-          // Add event listener to toggle content visibility
           groupHeaderDiv.querySelector('.toggle-group-btn')?.addEventListener('click', (e) => {
               const btn = e.target;
-              const content = btn.parentElement.nextElementSibling; // The div immediately after the header
+              const content = btn.parentElement.nextElementSibling;
               content?.classList.toggle('show');
               if (content) {
-                btn.innerHTML = content.classList.contains('show') ? '&#9660;' : '&#9658;'; // Toggle arrow direction
+                btn.innerHTML = content.classList.contains('show') ? '&#9660;' : '&#9658;';
               }
           });
 
-          // Tasks within each group are already sorted by the server's main sort.
-          // If a secondary sort is needed within groups (which is not handled by current server API),
-          // it would be done here client-side. For now, rely on server sort for overall list.
           renderTaskItems(groupContentDiv, groupedTasks[groupKey]);
       });
   }
@@ -357,7 +329,7 @@ export async function renderTaskList() {
  */
 function renderTaskItems(container, tasksToRender) {
   const tmpl = document.getElementById('task-item-template')?.content;
-  if (!tmpl) return; // Ensure template exists
+  if (!tmpl) return;
 
   tasksToRender.forEach(t => {
     const node = tmpl.cloneNode(true);
@@ -386,32 +358,35 @@ function renderTaskItems(container, tasksToRender) {
     if (t.id === currentSelectedTaskId) {
       el.classList.add('selected-task-item');
     } else {
-      el.classList.remove('selected-task-item'); // Ensure it's removed if not selected
+      el.classList.remove('selected-task-item');
     }
 
-    el.addEventListener('click', async () => { // Made async to await loadTaskFromServer
-      // Update the currentSelectedTaskId and re-render the task list
+    el.addEventListener('click', async () => {
+      // Remove 'selected-task-item' from the previously selected task
+      const previouslySelected = document.querySelector('.selected-task-item');
+      if (previouslySelected && previouslySelected !== el) {
+        previouslySelected.classList.remove('selected-task-item');
+      }
+
+      // Add 'selected-task-item' to the newly clicked task
+      el.classList.add('selected-task-item');
+
+      // Update the currentSelectedTaskId
       currentSelectedTaskId = t.id;
       
       let fullTask = t;
-      // Only attempt to load if it has a creator. The assumption is that
-      // the summary tasks don't have description, notes, attachments,
-      // so we always need to load the full task when clicked.
       if (t.creator) {
-          fullTask = await loadTaskFromServer(t.id) || t; // Use centralized API service
+          fullTask = await loadTaskFromServer(t.id) || t;
       }
 
-      // When an existing task is clicked, open the viewer
-      if (openTaskViewerFn) { // Use the dedicated viewer function
-          openTaskViewerFn(fullTask, false); // Pass false for isNewTask
+      if (openTaskViewerFn) {
+          openTaskViewerFn(fullTask, false);
       }
-      renderTaskList(); // Re-render task list to update selection highlight
 
-      // On mobile, hide the sidebar and show the main content (editor/viewer)
       const appContainer = document.querySelector(selectors.appContainer);
       if (window.innerWidth <= 768) {
         appContainer.classList.remove('sidebar-active');
-        appContainer.classList.add('viewer-active'); // Or editor-active, depending on where it leads
+        appContainer.classList.add('viewer-active');
       }
     });
     container.appendChild(node);
@@ -427,10 +402,9 @@ export async function renderFilterCategoriesMultiSelect() {
 
   if (!selectedDisplay || !dropdownContent) return;
 
-  selectedDisplay.innerHTML = ''; // Clear current selected tags
-  dropdownContent.innerHTML = ''; // Clear current dropdown items
+  selectedDisplay.innerHTML = '';
+  dropdownContent.innerHTML = '';
 
-  // Render selected categories as tags in the header
   if (selectedFilterCategories.length === 0) {
     selectedDisplay.innerHTML = '<span class="placeholder-text">All Categories</span>';
   } else {
@@ -439,10 +413,10 @@ export async function renderFilterCategoriesMultiSelect() {
       tag.className = 'selected-tag';
       tag.innerHTML = `${escapeHtml(cat)}<button data-cat="${escapeHtml(cat)}">x</button>`;
       tag.querySelector('button')?.addEventListener('click', async (e) => {
-        e.stopPropagation(); // Prevent dropdown from closing
+        e.stopPropagation();
         const categoryToRemove = e.target.dataset.cat;
         selectedFilterCategories = selectedFilterCategories.filter(c => c !== categoryToRemove);
-        await DB.putMeta('selectedFilterCategories', selectedFilterCategories); // Persist
+        await DB.putMeta('selectedFilterCategories', selectedFilterCategories);
         renderFilterCategoriesMultiSelect();
         renderTaskList();
       });
@@ -450,7 +424,6 @@ export async function renderFilterCategoriesMultiSelect() {
     });
   }
 
-  // Render all categories in the dropdown content
   categories.forEach(cat => {
     const item = document.createElement('div');
     item.className = 'dropdown-item';
@@ -460,18 +433,16 @@ export async function renderFilterCategoriesMultiSelect() {
     }
 
     item.addEventListener('click', async (e) => {
-      e.stopPropagation(); // Prevent dropdown from closing immediately on item click
+      e.stopPropagation();
 
       if (selectedFilterCategories.includes(cat)) {
-        // Remove if already selected
         selectedFilterCategories = selectedFilterCategories.filter(c => c !== cat);
       } else {
-        // Add if not selected
         selectedFilterCategories.push(cat);
       }
-      await DB.putMeta('selectedFilterCategories', selectedFilterCategories); // Persist
-      renderFilterCategoriesMultiSelect(); // Re-render this filter UI
-      renderTaskList(); // Re-render task list based on new filter
+      await DB.putMeta('selectedFilterCategories', selectedFilterCategories);
+      renderFilterCategoriesMultiSelect();
+      renderTaskList();
     });
     dropdownContent.appendChild(item);
   });
@@ -486,10 +457,9 @@ export async function renderFilterStatusMultiSelect() {
 
   if (!selectedDisplay || !dropdownContent) return;
 
-  selectedDisplay.innerHTML = ''; // Clear current selected tags
-  dropdownContent.innerHTML = ''; // Clear current dropdown items
+  selectedDisplay.innerHTML = '';
+  dropdownContent.innerHTML = '';
 
-  // Render selected statuses as tags in the header
   if (selectedFilterStatuses.length === 0) {
     selectedDisplay.innerHTML = '<span class="placeholder-text">All Statuses</span>';
   } else {
@@ -498,10 +468,10 @@ export async function renderFilterStatusMultiSelect() {
       tag.className = 'selected-tag';
       tag.innerHTML = `${escapeHtml(status)}<button data-status="${escapeHtml(status)}">x</button>`;
       tag.querySelector('button')?.addEventListener('click', async (e) => {
-        e.stopPropagation(); // Prevent dropdown from closing
+        e.stopPropagation();
         const statusToRemove = e.target.dataset.status;
         selectedFilterStatuses = selectedFilterStatuses.filter(s => s !== statusToRemove);
-        await DB.putMeta('selectedFilterStatuses', selectedFilterStatuses); // Persist
+        await DB.putMeta('selectedFilterStatuses', selectedFilterStatuses);
         renderFilterStatusMultiSelect();
         renderTaskList();
       });
@@ -509,7 +479,6 @@ export async function renderFilterStatusMultiSelect() {
     });
   }
 
-  // Render all statuses in the dropdown content
   statuses.forEach(status => {
     const item = document.createElement('div');
     item.className = 'dropdown-item';
@@ -519,18 +488,16 @@ export async function renderFilterStatusMultiSelect() {
     }
 
     item.addEventListener('click', async (e) => {
-      e.stopPropagation(); // Prevent dropdown from closing immediately on item click
+      e.stopPropagation();
 
       if (selectedFilterStatuses.includes(status)) {
-        // Remove if already selected
         selectedFilterStatuses = selectedFilterStatuses.filter(s => s !== status);
       } else {
-        // Add if not selected
         selectedFilterStatuses.push(status);
       }
-      await DB.putMeta('selectedFilterStatuses', selectedFilterStatuses); // Persist
-      renderFilterStatusMultiSelect(); // Re-render this filter UI
-      renderTaskList(); // Re-render task list based on new filter
+      await DB.putMeta('selectedFilterStatuses', selectedFilterStatuses);
+      renderFilterStatusMultiSelect();
+      renderTaskList();
     });
     dropdownContent.appendChild(item);
   });
