@@ -290,3 +290,45 @@ export async function deleteMilestoneFromServer(milestoneId, taskId) {
         throw error;
     }
 }
+
+/**
+ * Loads a distinct list of statuses from the server for the current user.
+ * @returns {Promise<string[]>} An array of distinct status strings.
+ */
+export async function getStatusesFromServer() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/get-statuses/`, _withAuth());
+        return await handleApiResponse(response);
+    } catch (error) {
+        console.error('Failed to load statuses from server:', error);
+        throw error;
+    }
+}
+
+/**
+ * Loads a distinct list of 'from' values from the server for the current user.
+ * @returns {Promise<string[]>} An array of distinct 'from' strings.
+ */
+export async function getFromValuesFromServer() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/get-from-values/`, _withAuth());
+        return await handleApiResponse(response);
+    } catch (error) {
+        console.error('Failed to load from values from server:', error);
+        throw error;
+    }
+}
+
+/**
+ * Loads a distinct list of categories from the server for the current user.
+ * @returns {Promise<string[]>} An array of distinct category strings.
+ */
+export async function getCategoriesFromServer() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/get-categories/`, _withAuth());
+        return await handleApiResponse(response);
+    } catch (error) {
+        console.error('Failed to load categories from server:', error);
+        throw error;
+    }
+}

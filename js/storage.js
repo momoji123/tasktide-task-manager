@@ -1,9 +1,6 @@
 export const DB = (function(){
   const DB_NAME = 'taskmgr-v1';
-  const STORE_TASKS = 'tasks';
   const STORE_META = 'meta';
-  // New store for milestones
-  const STORE_MILESTONES = 'milestones'; 
   let db;
 
   function open(){
@@ -45,22 +42,6 @@ export const DB = (function(){
     });
   }
 
-  // --- Task Operations (Existing) ---
-
-  async function getAllTasks(){
-    const conn = await open();
-    return new Promise((res,rej)=>{
-      const tx = conn.transaction([STORE_TASKS],'readonly');
-      const out = [];
-      const cursor = tx.objectStore(STORE_TASKS).openCursor();
-      cursor.onsuccess = e => {
-        const cur = e.target.result;
-        if(cur){ out.push(cur.value); cur.continue(); } else { res(out); }
-      };
-      cursor.onerror = e => rej(e.target.error);
-    });
-  }
-
   // --- Meta Operations (Existing) ---
   async function putMeta(key,value){
     const conn = await open();
@@ -81,38 +62,6 @@ export const DB = (function(){
     });
   }
 
-  // --- New Milestone Operations ---
-
-  async function getMilestone(id){
-    const conn = await open();
-    return new Promise((res,rej)=>{
-      const tx = conn.transaction([STORE_MILESTONES],'readonly');
-      tx.objectStore(STORE_MILESTONES).get(id).onsuccess = e => res(e.target.result);
-      tx.onerror = e => rej(e.target.error);
-    });
-  }
-
-  async function getMilestonesForTask(taskId){
-    const conn = await open();
-    return new Promise((res,rej)=>{
-      const tx = conn.transaction([STORE_MILESTONES],'readonly');
-      const milestoneStore = tx.objectStore(STORE_MILESTONES);
-      const taskIdIndex = milestoneStore.index('taskId');
-      const out = [];
-      
-      taskIdIndex.openCursor(IDBKeyRange.only(taskId)).onsuccess = e => {
-        const cursor = e.target.result;
-        if(cursor){
-          out.push(cursor.value);
-          cursor.continue();
-        } else {
-          res(out);
-        }
-      };
-      tx.onerror = e => rej(e.target.error);
-    });
-  }
-
   // New function to close the IndexedDB connection
   function close() {
     if (db) {
@@ -121,6 +70,5 @@ export const DB = (function(){
     }
   }
 
-  return {getAllTasks,putMeta,getMeta,close,
-          getMilestone, getMilestonesForTask};
+  return {putMeta,getMeta,close};
 })();

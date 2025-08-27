@@ -5,7 +5,9 @@
 import { DB } from './storage.js';
 import { escapeHtml, showModalAlert, showModalAlertConfirm } from './utilUI.js';
 // Import the new functions for login, logout, and getting authenticated username
-import { login, logout, getAuthenticatedUsername, initAuth, saveTaskToServer, saveMilestoneToServer, loadTasksSummaryFromServer, loadTaskFromServer, loadMilestonesForTaskFromServer } from './apiService.js';
+import { login, logout, getAuthenticatedUsername, initAuth, saveTaskToServer, saveMilestoneToServer, loadTasksSummaryFromServer, loadTaskFromServer, loadMilestonesForTaskFromServer, 
+  getCategoriesFromServer, getStatusesFromServer, getFromValuesFromServer 
+} from './apiService.js';
 import { renderTaskList } from './leftMenuTaskUI.js';
 
 // Internal state, initialized by the main UI module
@@ -197,27 +199,26 @@ async function manageList(type, title, renderFilterCategoriesMultiSelectCallback
       button.addEventListener('click', async (e) => {
         const idxToRemove = parseInt(e.target.dataset.idx);
         const itemToRemove = tempList[idxToRemove];
-        // TODO: This should ideally check server for usage
-        const allTasks = await DB.getAllTasks(); // Fetch all tasks inside the event listener
 
         let isInUse = false;
         if (type === 'categories') {
-          isInUse = allTasks.some(task => task.categories && task.categories.includes(itemToRemove));
+          var categories = await getCategoriesFromServer();
+          isInUse = categories.some(category => category ===itemToRemove);
           if (isInUse) {
-            showModalAlert(`Cannot delete category "${itemToRemove}" because it is currently assigned to one or more tasks.`);
+            showModalAlert(`Cannot delete category "${itemToRemove}" because it is currently in use`);
           }
         } else if (type === 'statuses') {
           // Check if status is used by tasks OR milestones
-          const tasksUse = allTasks.some(task => task.status === itemToRemove);
-          const allMilestones = await Promise.all(allTasks.map(t => DB.getMilestonesForTask(t.id))).then(arr => arr.flat());
-          const milestonesUse = allMilestones.some(m => m.status === itemToRemove);
+          var statuses = await getStatusesFromServer();
 
-          if (tasksUse || milestonesUse) {
+          isInUse = statuses.some(stat => stat ===itemToRemove);
+          if (isInUse) {
             showModalAlert(`Cannot delete status "${itemToRemove}" because it is currently in use by one or more tasks or milestones.`);
           }
-          isInUse = tasksUse || milestonesUse;
         } else if (type === 'froms') {
-          isInUse = allTasks.some(task => task.from === itemToRemove);
+          var froms = await getFromValuesFromServer();
+
+          isInUse = froms.some(from => from === itemToRemove);
           if (isInUse) {
             showModalAlert(`Cannot delete "From" source "${itemToRemove}" because it is currently used by one or more tasks.`);
           }

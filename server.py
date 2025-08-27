@@ -131,6 +131,72 @@ def _init_db():
     conn.close()
     print(f"SQLite database initialized at: {os.path.abspath(DB_FILE)}")
 
+    """
+    Retrieves a distinct list of statuses for a given user.
+    """
+    conn = None
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT status FROM tasks WHERE creator = ? AND status IS NOT NULL AND status != '' ORDER BY status", (username,))
+        statuses = [row[0] for row in cursor.fetchall()]
+        return statuses
+    except sqlite3.Error as e:
+        print(f"Database error while fetching statuses: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def get_distinct_from_values(username):
+    """
+    Retrieves a distinct list of 'from' values for a given user.
+    """
+    conn = None
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT \"from\" FROM tasks WHERE creator = ? AND \"from\" IS NOT NULL AND \"from\" != '' ORDER BY \"from\"", (username,))
+        from_values = [row[0] for row in cursor.fetchall()]
+        return from_values
+    except sqlite3.Error as e:
+        print(f"Database error while fetching 'from' values: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def get_distinct_categories(username):
+    """
+    Retrieves all distinct categories for a given user by parsing the JSON strings.
+    """
+    conn = None
+    all_categories = set()
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        # Fetch all category JSON strings for the user
+        cursor.execute("SELECT categories FROM tasks WHERE creator = ? AND categories IS NOT NULL AND categories != ''", (username,))
+        rows = cursor.fetchall()
+        for row in rows:
+            try:
+                # Parse the JSON string and add categories to the set
+                categories_list = json.loads(row[0])
+                if isinstance(categories_list, list):
+                    all_categories.update(categories_list)
+            except (json.JSONDecodeError, TypeError):
+                # Handle malformed or non-list data gracefully
+                continue
+        # Convert set to sorted list
+        return sorted(list(all_categories))
+    except sqlite3.Error as e:
+        print(f"Database error while fetching categories: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+
 class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
 
     def _send_response(self, status_code, content_type="text/plain", body=""):
@@ -314,7 +380,7 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
         path_segments = parsed_path.path.strip('/').split('/')
 
         # Static files should not require authentication
-        if path_segments[0] not in ["load-task", "load-milestones", "load-milestone", "load-tasks-summary", "login"]:
+        if path_segments[0] not in ["load-task", "load-milestones", "load-milestone", "load-tasks-summary", "login", "get-statuses", "get-categories", "get-from-values"]:
             super().do_GET()
             return
 
@@ -328,6 +394,22 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
         try:
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()
+
+            # New endpoints to get distinct values
+            if len(path_segments) == 1:
+                if path_segments[0] == "get-statuses":
+                    statuses = get_distinct_statuses(username)
+                    self._send_response(200, "application/json", json.dumps(statuses).encode('utf-8'))
+                    return
+                elif path_segments[0] == "get-from-values":
+                    from_values = get_distinct_from_values(username)
+                    self._send_response(200, "application/json", json.dumps(from_values).encode('utf-8'))
+                    return
+                elif path_segments[0] == "get-categories":
+                    categories = get_distinct_categories(username)
+                    self._send_response(200, "application/json", json.dumps(categories).encode('utf-8'))
+                    return
+
 
             # Load Task Summary (for left menu with filters): /load-tasks-summary
             if len(path_segments) == 1 and path_segments[0] == "load-tasks-summary":
@@ -626,6 +708,10 @@ with socketserver.ThreadingTCPServer(("localhost", PORT), SimpleTaskServerHandle
     print(f"To login and get a token: POST request to http://localhost:{PORT}/login with JSON body {'{'} \"username\": \"your_username\", \"password\": \"your_password\" {'}'}")
     # New endpoint for summarized tasks with filters
     print(f"To load summarized tasks with filters (requires JWT Auth): GET request to http://localhost:{PORT}/load-tasks-summary?q=<query>&categories=<cat1,cat2>&statuses=<stat1,stat2>&sortBy=<field>&createdRF=<date>&createdRT=<date>&updatedRF=<date>&updatedRT=<date>&deadlineRF=<date>&deadlineRT=<date>&finishedRF=<date>&finishedRT=<date>")
+    # New endpoints for distinct values
+    print(f"To get distinct statuses: GET request to http://localhost:{PORT}/get-statuses")
+    print(f"To get distinct 'from' values: GET request to http://localhost:{PORT}/get-from-values")
+    print(f"To get distinct categories: GET request to http://localhost:{PORT}/get-categories")
 
 
     try:
