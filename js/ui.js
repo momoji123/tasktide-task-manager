@@ -19,6 +19,7 @@ export const UI = (function() {
   let froms = [];
   let filterSectionVisible = true;
   let selectedFilterCategories = [];
+  let selectedFilterStatuses = [];
   let username = null; // Added username state
 
   /**
@@ -36,6 +37,7 @@ export const UI = (function() {
     froms = (await DB.getMeta('froms')) || ['Work', 'Personal', 'Shopping'];
     filterSectionVisible = (await DB.getMeta('filterSectionVisible')) ?? true;
     selectedFilterCategories = (await DB.getMeta('selectedFilterCategories')) || [];
+    selectedFilterStatuses = (await DB.getMeta('selectedFilterStatuses')) || [];
     username = (await DB.getMeta('username')) ||sessionStorage.getItem('authUsername') ||  null; // Load username
 
     // 2. Prepare initial state object for passing to components
@@ -45,6 +47,7 @@ export const UI = (function() {
       froms: froms,
       filterSectionVisible: filterSectionVisible,
       selectedFilterCategories: selectedFilterCategories,
+      selectedFilterStatuses: selectedFilterStatuses,
       username: username // Pass username to common state
     };
 
