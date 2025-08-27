@@ -10,7 +10,7 @@ export const DB = (function(){
     return new Promise((resolve,reject)=>{
       if(db) return resolve(db);
       // Version bump to 4 to trigger onupgradeneeded for milestones
-      const r = indexedDB.open(DB_NAME, 4); 
+      const r = indexedDB.open(DB_NAME); 
       r.onupgradeneeded = e => {
         const idb = e.target.result;
         
@@ -46,63 +46,6 @@ export const DB = (function(){
   }
 
   // --- Task Operations (Existing) ---
-  async function putTask(task){
-    const connection = await open();
-    return new Promise((resolve,reject)=>{
-      const tx = connection.transaction([STORE_TASKS],'readwrite');
-      const store = tx.objectStore(STORE_TASKS);
-
-      // Create a shallow copy of the task object to remove sensitive fields
-      // before storing in IndexedDB. These fields will be loaded from the server
-      // on demand.
-      const taskForIndexedDB = { ...task };
-      delete taskForIndexedDB.description;
-      delete taskForIndexedDB.notes;
-      delete taskForIndexedDB.attachments;
-
-      store.put(taskForIndexedDB); // Save modified task to IndexedDB
-      tx.oncomplete = ()=>resolve(task); // Resolve with original task object
-      tx.onerror = e => reject(e.target.error);
-    });
-  }
-
-  async function getTask(id){
-    const conn = await open();
-    return new Promise((res,rej)=>{
-      const tx = conn.transaction([STORE_TASKS],'readonly');
-      tx.objectStore(STORE_TASKS).get(id).onsuccess = e => res(e.target.result);
-      tx.onerror = e => rej(e.target.error);
-    });
-  }
-
-  async function deleteTask(id){
-    const conn = await open();
-    return new Promise(async (res,rej)=>{
-      const tx = conn.transaction([STORE_TASKS, STORE_MILESTONES],'readwrite');
-      
-      // Delete task itself
-      tx.objectStore(STORE_TASKS).delete(id);
-
-      // Delete all associated milestones
-      const milestoneStore = tx.objectStore(STORE_MILESTONES);
-      const taskIdIndex = milestoneStore.index('taskId');
-      const request = taskIdIndex.openCursor(IDBKeyRange.only(id));
-
-      request.onsuccess = (e) => {
-        const cursor = e.target.result;
-        if (cursor) {
-          cursor.delete(); // Delete the current milestone
-          cursor.continue(); // Move to the next
-        }
-      };
-      request.onerror = (e) => {
-        console.error("Error deleting associated milestones:", e.target.error);
-      };
-
-      tx.oncomplete = ()=>res();
-      tx.onerror = e => rej(e.target.error);
-    });
-  }
 
   async function getAllTasks(){
     const conn = await open();
@@ -139,20 +82,6 @@ export const DB = (function(){
   }
 
   // --- New Milestone Operations ---
-  async function putMilestone(milestone){
-    const connection = await open();
-    return new Promise((resolve,reject)=>{
-      const tx = connection.transaction([STORE_MILESTONES],'readwrite');
-      const store = tx.objectStore(STORE_MILESTONES);
-
-      const milestoneForIndexedDB = { ...milestone };
-      delete milestoneForIndexedDB.notes;
-      store.put(milestoneForIndexedDB);
-      
-      tx.oncomplete = ()=>resolve(milestone);
-      tx.onerror = e => reject(e.target.error);
-    });
-  }
 
   async function getMilestone(id){
     const conn = await open();
@@ -184,16 +113,6 @@ export const DB = (function(){
     });
   }
 
-  async function deleteMilestone(id){
-    const conn = await open();
-    return new Promise((res,rej)=>{
-      const tx = conn.transaction([STORE_MILESTONES],'readwrite');
-      tx.objectStore(STORE_MILESTONES).delete(id);
-      tx.oncomplete = ()=>res();
-      tx.onerror = e => rej(e.target.error);
-    });
-  }
-
   // New function to close the IndexedDB connection
   function close() {
     if (db) {
@@ -202,6 +121,6 @@ export const DB = (function(){
     }
   }
 
-  return {putTask,getTask,deleteTask,getAllTasks,putMeta,getMeta,close,
-          putMilestone, getMilestone, getMilestonesForTask, deleteMilestone};
+  return {getAllTasks,putMeta,getMeta,close,
+          getMilestone, getMilestonesForTask};
 })();
