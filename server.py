@@ -131,6 +131,10 @@ def _init_db():
     conn.close()
     print(f"SQLite database initialized at: {os.path.abspath(DB_FILE)}")
 
+# --- New Functions to get distinct values ---
+# These functions now rely on the calling method to provide the username
+# after it has been authenticated. This simplifies the functions themselves.
+def get_distinct_statuses(username):
     """
     Retrieves a distinct list of statuses for a given user.
     """
