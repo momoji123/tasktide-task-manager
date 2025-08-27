@@ -29,7 +29,7 @@ const selectors = {
   taskFromSelect: '#taskFrom',
   taskPriorityInput: '#taskPriority',
   taskDeadlineInput: '#taskDeadline',
-  taskFinishDateInput: '#taskDeadline',
+  taskFinishDateInput: '#taskFinishDate',
   taskStatusSelect: '#statusSelect',
   descEditor: '#descEditor',
   notesEditor: '#notesEditor',
