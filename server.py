@@ -83,15 +83,14 @@ def _verify_jwt(token, secret):
 # --- Database Initialization ---
 
 def _init_db():
-    """Initializes the SQLite database and creates tables if they don't exist."""
+    """Initializes the SQLite database and creates tables/columns if they don't exist."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
     # Enable WAL mode for better concurrency
     cursor.execute("PRAGMA journal_mode=WAL;")
 
-    # Create tasks table
-    # Storing categories and attachments as JSON strings
+    # Create tasks table with all columns for new DBs
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS tasks (
             id TEXT PRIMARY KEY,
@@ -106,12 +105,12 @@ def _init_db():
             notes TEXT,
             categories TEXT,
             attachments TEXT,
+            createdAt TEXT,
             updatedAt TEXT
         )
     ''')
 
     # Create milestones table
-    # Storing notes as JSON string
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS milestones (
             id TEXT PRIMARY KEY,
@@ -126,10 +125,19 @@ def _init_db():
             FOREIGN KEY (taskId) REFERENCES tasks(id) ON DELETE CASCADE
         )
     ''')
+    
+    # --- Schema Migration for existing databases ---
+    # Check for and add the createdAt column to the tasks table if it's missing
+    cursor.execute("PRAGMA table_info(tasks)")
+    columns = [info[1] for info in cursor.fetchall()]
+    if 'createdAt' not in columns:
+        print("Migrating database: Adding 'createdAt' column to tasks table.")
+        cursor.execute("ALTER TABLE tasks ADD COLUMN createdAt TEXT")
 
     conn.commit()
     conn.close()
     print(f"SQLite database initialized at: {os.path.abspath(DB_FILE)}")
+
 
 # --- New Functions to get distinct values ---
 # These functions now rely on the calling method to provide the username
@@ -324,13 +332,13 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
                 cursor.execute('''
                     INSERT OR REPLACE INTO tasks (
                         id, creator, title, "from", priority, deadline, finishDate, status,
-                        description, notes, categories, attachments, updatedAt
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        description, notes, categories, attachments, createdAt, updatedAt
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     task_id, username, data.get('title'), data.get('from'), data.get('priority'),
                     data.get('deadline'), data.get('finishDate'), data.get('status'),
                     data.get('description'), data.get('notes'), categories_json, attachments_json,
-                    data.get('updatedAt')
+                    data.get('createdAt'), data.get('updatedAt')
                 ))
                 conn.commit()
                 self._send_response(200, "application/json", json.dumps({"message": f"Task '{task_id}' for user '{username}' saved successfully."}).encode('utf-8'))
@@ -431,10 +439,14 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
                 deadline_to = query_params.get('deadlineRT', [''])[0]
                 finished_from = query_params.get('finishedRF', [''])[0]
                 finished_to = query_params.get('finishedRT', [''])[0]
+                
+                # Pagination parameters
+                limit = int(query_params.get('limit', [10])[0])
+                offset = int(query_params.get('offset', [0])[0])
 
                 sql_query = """
                     SELECT
-                        id, creator, title, "from", priority, deadline, finishDate, status, categories, updatedAt
+                        id, creator, title, "from", priority, deadline, finishDate, status, categories, createdAt, updatedAt
                     FROM
                         tasks
                     WHERE
@@ -444,8 +456,8 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
 
                 # Apply search filter
                 if search_query:
-                    sql_query += " AND (LOWER(title) LIKE ? OR LOWER(\"from\") LIKE ?)"
-                    query_args.extend([f'%{search_query}%', f'%{search_query}%'])
+                    sql_query += " AND (LOWER(title) LIKE ? OR LOWER(\"from\") LIKE ? OR LOWER(description) LIKE ? OR LOWER(notes) LIKE ?)"
+                    query_args.extend([f'%{search_query}%', f'%{search_query}%', f'%{search_query}%', f'%{search_query}%'])
 
                 # Apply category filter
                 if selected_categories and selected_categories != ['']:
@@ -467,32 +479,19 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
                 def add_date_filter(column_name, from_date, to_date):
                     nonlocal sql_query, query_args
                     if from_date and to_date:
-                        sql_query += f" AND {column_name} BETWEEN ? AND ?"
-                        query_args.extend([from_date, to_date + 'T23:59:59.999Z']) # Include full end day
+                        sql_query += f" AND date({column_name}) BETWEEN date(?) AND date(?)"
+                        query_args.extend([from_date, to_date])
                     elif from_date:
-                        sql_query += f" AND {column_name} >= ?"
+                        sql_query += f" AND date({column_name}) >= date(?)"
                         query_args.append(from_date)
                     elif to_date:
-                        sql_query += f" AND {column_name} <= ?"
-                        query_args.append(to_date + 'T23:59:59.999Z')
+                        sql_query += f" AND date({column_name}) <= date(?)"
+                        query_args.append(to_date)
 
                 add_date_filter('createdAt', created_from, created_to)
                 add_date_filter('updatedAt', updated_from, updated_to)
                 add_date_filter('deadline', deadline_from, deadline_to)
-                # For finishDate, only include tasks with a finishDate if a range is provided
-                if finished_from or finished_to:
-                    if not finished_from and not finished_to: # If both empty, then all finished tasks.
-                        sql_query += " AND finishDate IS NOT NULL"
-                    elif finished_from and finished_to:
-                        sql_query += " AND finishDate BETWEEN ? AND ?"
-                        query_args.extend([finished_from, finished_to + 'T23:59:59.999Z'])
-                    elif finished_from:
-                        sql_query += " AND finishDate >= ?"
-                        query_args.append(finished_from)
-                    elif finished_to:
-                        sql_query += " AND finishDate <= ?"
-                        query_args.append(finished_to + 'T23:59:59.999Z')
-                # If neither finished_from nor finished_to are provided, we don't filter by finishedDate here.
+                add_date_filter('finishDate', finished_from, finished_to)
 
                 # Apply sorting
                 order_clause = ""
@@ -506,6 +505,10 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
                     order_clause = " ORDER BY updatedAt DESC"
                 
                 sql_query += order_clause
+
+                # Apply pagination
+                sql_query += " LIMIT ? OFFSET ?"
+                query_args.extend([limit, offset])
                 
                 cursor.execute(sql_query, query_args)
                 rows = cursor.fetchall()
@@ -711,7 +714,7 @@ with socketserver.ThreadingTCPServer(("localhost", PORT), SimpleTaskServerHandle
     print(f"To delete a milestone (requires JWT Auth): DELETE request to http://localhost:{PORT}/delete-milestone/<task-id>/<milestone-id>")
     print(f"To login and get a token: POST request to http://localhost:{PORT}/login with JSON body {'{'} \"username\": \"your_username\", \"password\": \"your_password\" {'}'}")
     # New endpoint for summarized tasks with filters
-    print(f"To load summarized tasks with filters (requires JWT Auth): GET request to http://localhost:{PORT}/load-tasks-summary?q=<query>&categories=<cat1,cat2>&statuses=<stat1,stat2>&sortBy=<field>&createdRF=<date>&createdRT=<date>&updatedRF=<date>&updatedRT=<date>&deadlineRF=<date>&deadlineRT=<date>&finishedRF=<date>&finishedRT=<date>")
+    print(f"To load summarized tasks with filters (requires JWT Auth): GET request to http://localhost:{PORT}/load-tasks-summary?q=<query>&categories=<cat1,cat2>&statuses=<stat1,stat2>&sortBy=<field>&createdRF=<date>&createdRT=<date>&updatedRF=<date>&updatedRT=<date>&deadlineRF=<date>&deadlineRT=<date>&finishedRF=<date>&finishedRT=<date>&limit=<num>&offset=<num>")
     # New endpoints for distinct values
     print(f"To get distinct statuses: GET request to http://localhost:{PORT}/get-statuses")
     print(f"To get distinct 'from' values: GET request to http://localhost:{PORT}/get-from-values")
@@ -724,3 +727,4 @@ with socketserver.ThreadingTCPServer(("localhost", PORT), SimpleTaskServerHandle
         print("\nServer is shutting down...")
         httpd.shutdown()
         print("Server has been shut down gracefully.")
+

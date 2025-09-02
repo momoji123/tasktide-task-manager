@@ -152,6 +152,7 @@
         <button id="toggleFilterBtn">Toggle Filters</button> <!-- New filter toggle button -->
       </div>
       <section id="taskList" class="task-list"></section>
+      <button id="showNextBtn" class="show-next-btn">Show Next</button>
     </aside>
 
     <!-- New Filter Column -->
@@ -249,6 +250,8 @@
           <option value="from">From</option>
           <option value="updatedAt">Last updated</option>
         </select>
+        <label for="tasksPerPage">Tasks per page</label>
+        <input type="number" id="tasksPerPage" value="10" min="1" max="100" style="padding: 6px 8px; border-radius: 6px; border: 1px solid rgb(226, 230, 239); width: 100%;">
       </section>
     </aside>
 

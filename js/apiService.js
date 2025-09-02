@@ -153,9 +153,10 @@ export async function loadTaskFromServer(taskId) {
  * Loads a summary of tasks from the server, applying provided filters and sorting.
  * This endpoint is optimized for the left menu, returning only necessary fields.
  * @param {object} filters - An object containing filter parameters (q, categories, statuses, sortBy, date ranges).
+ * @param {object} pagination - An object containing pagination parameters (limit, offset).
  * @returns {Promise<object[]>} An array of summarized task objects.
  */
-export async function loadTasksSummaryFromServer(filters = {}) {
+export async function loadTasksSummaryFromServer(filters = {}, pagination = {}) {
     try {
         const params = new URLSearchParams();
         if (filters.q) params.append('q', filters.q);
@@ -170,6 +171,10 @@ export async function loadTasksSummaryFromServer(filters = {}) {
         if (filters.deadlineRT) params.append('deadlineRT', filters.deadlineRT);
         if (filters.finishedRF) params.append('finishedRF', filters.finishedRF);
         if (filters.finishedRT) params.append('finishedRT', filters.finishedRT);
+
+        // Add pagination parameters
+        if (pagination.limit) params.append('limit', pagination.limit);
+        if (pagination.offset) params.append('offset', pagination.offset);
 
         const url = `${API_BASE_URL}/load-tasks-summary?${params.toString()}`;
         const response = await fetch(url, _withAuth());

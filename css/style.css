@@ -961,3 +961,19 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 
 /* When a task is selected, either viewer or editor will be shown */
 /* This is controlled by JS, setting display to 'grid' or 'flex' as needed */
+
+.show-next-btn {
+  width: 100%;
+  padding: 10px;
+  margin-top: 10px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.show-next-btn:hover {
+  background-color: #206bbd;
+}
