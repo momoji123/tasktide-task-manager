@@ -431,6 +431,7 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
                 selected_categories = query_params.get('categories', [''])[0].split(',')
                 selected_statuses = query_params.get('statuses', [''])[0].split(',')
                 sort_by = query_params.get('sortBy', ['updatedAt'])[0]
+                group_by = query_params.get('groupBy', ['__none'])[0]
                 created_from = query_params.get('createdRF', [''])[0]
                 created_to = query_params.get('createdRT', [''])[0]
                 updated_from = query_params.get('updatedRF', [''])[0]
@@ -494,15 +495,43 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
                 add_date_filter('finishDate', finished_from, finished_to)
 
                 # Apply sorting
-                order_clause = ""
-                if sort_by == 'deadline':
-                    order_clause = " ORDER BY CASE WHEN deadline IS NULL THEN 1 ELSE 0 END, deadline ASC"
-                elif sort_by == 'priority':
-                    order_clause = " ORDER BY priority ASC"
-                elif sort_by == 'from':
-                    order_clause = " ORDER BY \"from\" ASC"
-                else: # Default or 'updatedAt'
-                    order_clause = " ORDER BY updatedAt DESC"
+                sort_expressions = []
+    
+                # Map for group_by values to SQL sort expressions
+                group_by_map = {
+                    'priority': 'priority ASC',
+                    'from': '"from" ASC',
+                    'status': 'status ASC',
+                    'deadlineYear': 'CASE WHEN deadline IS NULL OR deadline = \'\' THEN 1 ELSE 0 END, deadline ASC',
+                    'deadlineMonthYear': 'CASE WHEN deadline IS NULL OR deadline = \'\' THEN 1 ELSE 0 END, deadline ASC',
+                    'finishDateYear': 'CASE WHEN finishDate IS NULL OR finishDate = \'\' THEN 1 ELSE 0 END, finishDate ASC',
+                    'finishDateMonthYear': 'CASE WHEN finishDate IS NULL OR finishDate = \'\' THEN 1 ELSE 0 END, finishDate ASC',
+                    'createdAtYear': 'CASE WHEN createdAt IS NULL OR createdAt = \'\' THEN 1 ELSE 0 END, createdAt ASC',
+                    'createdAtMonthYear': 'CASE WHEN createdAt IS NULL OR createdAt = \'\' THEN 1 ELSE 0 END, createdAt ASC',
+                }
+
+                # Map for sort_by values to SQL sort expressions
+                sort_by_map = {
+                    'deadline': 'CASE WHEN deadline IS NULL OR deadline = \'\' THEN 1 ELSE 0 END, deadline ASC',
+                    'priority': 'priority ASC',
+                    'from': '"from" ASC',
+                    'updatedAt': 'updatedAt DESC',
+                }
+
+                # Add group_by expression first
+                if group_by in group_by_map:
+                    sort_expressions.append(group_by_map[group_by])
+
+                # Add sort_by expression, avoiding duplicates
+                sort_by_expression = sort_by_map.get(sort_by, 'updatedAt DESC')
+                if sort_by_expression not in sort_expressions:
+                    sort_expressions.append(sort_by_expression)
+                
+                # Fallback if no sorting is defined
+                if not sort_expressions:
+                    sort_expressions.append('updatedAt DESC')
+
+                order_clause = " ORDER BY " + ", ".join(sort_expressions)
                 
                 sql_query += order_clause
 
@@ -714,7 +743,7 @@ with socketserver.ThreadingTCPServer(("localhost", PORT), SimpleTaskServerHandle
     print(f"To delete a milestone (requires JWT Auth): DELETE request to http://localhost:{PORT}/delete-milestone/<task-id>/<milestone-id>")
     print(f"To login and get a token: POST request to http://localhost:{PORT}/login with JSON body {'{'} \"username\": \"your_username\", \"password\": \"your_password\" {'}'}")
     # New endpoint for summarized tasks with filters
-    print(f"To load summarized tasks with filters (requires JWT Auth): GET request to http://localhost:{PORT}/load-tasks-summary?q=<query>&categories=<cat1,cat2>&statuses=<stat1,stat2>&sortBy=<field>&createdRF=<date>&createdRT=<date>&updatedRF=<date>&updatedRT=<date>&deadlineRF=<date>&deadlineRT=<date>&finishedRF=<date>&finishedRT=<date>&limit=<num>&offset=<num>")
+    print(f"To load summarized tasks with filters (requires JWT Auth): GET request to http://localhost:{PORT}/load-tasks-summary?q=<query>&categories=<cat1,cat2>&statuses=<stat1,stat2>&sortBy=<field>&groupBy=<field>&createdRF=<date>&createdRT=<date>&updatedRF=<date>&updatedRT=<date>&deadlineRF=<date>&deadlineRT=<date>&finishedRF=<date>&finishedRT=<date>&limit=<num>&offset=<num>")
     # New endpoints for distinct values
     print(f"To get distinct statuses: GET request to http://localhost:{PORT}/get-statuses")
     print(f"To get distinct 'from' values: GET request to http://localhost:{PORT}/get-from-values")

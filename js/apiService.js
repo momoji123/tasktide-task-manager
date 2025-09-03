@@ -171,6 +171,8 @@ export async function loadTasksSummaryFromServer(filters = {}, pagination = {}) 
         if (filters.deadlineRT) params.append('deadlineRT', filters.deadlineRT);
         if (filters.finishedRF) params.append('finishedRF', filters.finishedRF);
         if (filters.finishedRT) params.append('finishedRT', filters.finishedRT);
+        if (filters.groupBy) params.append('groupBy', filters.groupBy);
+        
 
         // Add pagination parameters
         if (pagination.limit) params.append('limit', pagination.limit);

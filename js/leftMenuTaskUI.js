@@ -217,6 +217,7 @@ export async function renderTaskList(isNewFilter = true) {
     deadlineRT: document.querySelector(selectors.deadlineRangeTo)?.value,
     finishedRF: document.querySelector(selectors.finishedRangeFrom)?.value,
     finishedRT: document.querySelector(selectors.finishedRangeTo)?.value,
+    groupBy: document.querySelector(selectors.groupBy)?.value || '__none',
   };
 
   const limit = parseInt(document.querySelector(selectors.tasksPerPage)?.value, 10) || 10;
