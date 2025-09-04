@@ -69,16 +69,44 @@ function getRecentlyFinishedTasks(tasks) {
     return recentlyFinished;
 }
 
-function renderTaskList(tasks, showDeadline = true, showFinishDate = true) {
+function renderTaskList(tasks, showDeadline = true, showFinishDate = true, showUpdatedDate = true) {
     if (!tasks || tasks.length === 0) {
         return '<div>Nothing to show.</div>';
     }
 
-    //TODO: Deadline and finishDate should be dynamically shown based on the argument.
+    
+    
+    if (showDeadline) {
+        tasks.sort((b, a) => {
+            const dateA = a.deadline ? new Date(a.deadline).getTime() : 0;
+            const dateB = b.deadline ? new Date(b.deadline).getTime() : 0;
+            return dateA - dateB;
+        });
+    }
+    
+    if (showFinishDate) {
+        tasks.sort((b, a) => {
+            const dateA = a.finishDate ? new Date(a.finishDate).getTime() : 0;
+            const dateB = b.finishDate ? new Date(b.finishDate).getTime() : 0;
+            return dateA - dateB;
+        });
+    }
+    
+    if (showUpdatedDate) {
+        tasks.sort((b, a) => {
+            const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+            const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+            return dateA - dateB;
+        });
+    }
+    
+    
     let listItems = tasks.map(task => {
         let deadlineText = showDeadline && task.deadline ? ` (Deadline: ${new Date(task.deadline).toLocaleDateString()})` : '';
         let finishDateText = showFinishDate && task.finishDate ? ` (Finished: ${new Date(task.finishDate).toLocaleDateString()})` : '';
-        return `<li>${task.title}${deadlineText}${finishDateText}</li>`;
+        let updatedDateText = showUpdatedDate && task.updatedAt ? ` (Updated: ${new Date(task.updatedAt).toLocaleDateString()})` : '';
+
+        return `<li>${task.title}${deadlineText}${finishDateText}${updatedDateText}</li>`;
     }).join('');
     
 
@@ -115,22 +143,22 @@ export async function renderStatistics() {
 
                 <div class="statistic-widget">
                     <h3>Due Soon (<= 7 days)</h3>
-                    ${renderTaskList(dueSoon)}
+                    ${renderTaskList(dueSoon, true, false, false)}
                 </div>
 
                 <div class="statistic-widget">
                     <h3>Overdue Tasks</h3>
-                    ${renderTaskList(overdue)}
+                    ${renderTaskList(overdue, true, false, false)}
                 </div>
 
                 <div class="statistic-widget">
                     <h3>Progress Last 2 Week (updated in last 14 days)</h3>
-                    ${renderTaskList(recentlyUpdated)}
+                    ${renderTaskList(recentlyUpdated, false, false, true)}
                 </div>
 
                 <div class="statistic-widget">
                     <h3>Finished Last 2 Week</h3>
-                    ${renderTaskList(recentlyFinished)}
+                    ${renderTaskList(recentlyFinished, false, true, false)}
                 </div>
             </div>
         `;
