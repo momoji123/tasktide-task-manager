@@ -392,7 +392,7 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
         path_segments = parsed_path.path.strip('/').split('/')
 
         # Static files should not require authentication
-        if path_segments[0] not in ["load-task", "load-milestones", "load-milestone", "load-tasks-summary", "login", "get-statuses", "get-categories", "get-from-values"]:
+        if path_segments[0] not in ["load-task", "load-milestones", "load-milestone", "load-tasks-summary", "login", "get-statuses", "get-categories", "get-from-values", "get-task-counts"]:
             super().do_GET()
             return
 
@@ -421,7 +421,25 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
                     categories = get_distinct_categories(username)
                     self._send_response(200, "application/json", json.dumps(categories).encode('utf-8'))
                     return
+                elif path_segments[0] == "get-task-counts":
+                        query_params = parse_qs(parsed_path.query)
+                        updated_since_days = query_params.get('updatedSince', [None])[0]
+    
+                        sql_query = "SELECT status, COUNT(*) FROM tasks WHERE creator = ? GROUP BY status"
+                        query_args = [username]
+    
+                        if updated_since_days and updated_since_days.isdigit():
+                            since_date = datetime.utcnow() - timedelta(days=int(updated_since_days))
+                            sql_query = "SELECT status, COUNT(*) FROM tasks WHERE creator = ? AND updatedAt >= ? GROUP BY status"
+                            query_args.extend([since_date.isoformat()])
 
+                        cursor.execute(sql_query, query_args)
+                        rows = cursor.fetchall()
+                        
+                        task_counts = {status: count for status, count in rows}
+                        
+                        self._send_response(200, "application/json", json.dumps(task_counts).encode('utf-8'))
+                        return
 
             # Load Task Summary (for left menu with filters): /load-tasks-summary
             if len(path_segments) == 1 and path_segments[0] == "load-tasks-summary":

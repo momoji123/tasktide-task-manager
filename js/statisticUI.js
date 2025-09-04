@@ -1,18 +1,9 @@
-
 // js/statisticUI.js
 import { DB } from './storage.js';
 import * as apiService from './apiService.js';
 
 const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
-const twoWeeksInMs = 14 * 24 * 60 * 60 * 1000;
-
-function getTaskCountsByStatus(tasks) {
-    const counts = {};
-    for (const task of tasks) {
-        counts[task.status] = (counts[task.status] || 0) + 1;
-    }
-    return counts;
-}
+const threeWeeksInMs = 21 * 24 * 60 * 60 * 1000;
 
 function getDueSoonAndOverdueTasks(tasks) {
     const dueSoon = [];
@@ -43,7 +34,7 @@ function getRecentlyUpdatedTasks(tasks) {
             const updatedAt = new Date(task.updatedAt);
             const diff = now - updatedAt;
 
-            if (diff <= twoWeeksInMs) {
+            if (diff <= threeWeeksInMs) {
                 recentlyUpdated.push(task);
             }
         }
@@ -61,7 +52,7 @@ function getRecentlyFinishedTasks(tasks) {
             const diff = now - finishDate;
 
 
-            if (diff <= twoWeeksInMs) {
+            if (diff <= threeWeeksInMs) {
                 recentlyFinished.push(task);
             }
         }
@@ -122,13 +113,27 @@ export async function renderStatistics() {
     if (!placeholder) return;
 
     try {
-        const tasks = await apiService.loadTasksSummaryFromServer();
         const statuses = await DB.getMeta('statuses');
+        const taskCounts = await apiService.getTaskCounts();
 
-        const taskCounts = getTaskCountsByStatus(tasks);
-        const { dueSoon, overdue } = getDueSoonAndOverdueTasks(tasks);
-        const recentlyUpdated = getRecentlyUpdatedTasks(tasks);
-        const recentlyFinished = getRecentlyFinishedTasks(tasks);
+        let now = new Date();
+
+        
+        const taskWithDeadline = await apiService.loadTasksSummaryFromServer({
+            deadlineRT: new Date(now.getTime() + sevenDaysInMs).toISOString().split('T')[0]
+        }, { limit: 100 });
+
+        const updatedTasks = await apiService.loadTasksSummaryFromServer({
+            updatedRF: new Date(now.getTime() - threeWeeksInMs).toISOString().split('T')[0]
+        }, { limit: 100 });
+
+        const finishedTask = await apiService.loadTasksSummaryFromServer({
+            finishedRF: new Date(now.getTime() - threeWeeksInMs).toISOString().split('T')[0]
+        }, { limit: 100 });
+
+        const { dueSoon, overdue } = getDueSoonAndOverdueTasks(taskWithDeadline);
+        const recentlyUpdated = getRecentlyUpdatedTasks(updatedTasks);
+        const recentlyFinished = getRecentlyFinishedTasks(finishedTask);
 
         let statisticsHTML = `
             <div class="statistics-section">
@@ -155,12 +160,12 @@ export async function renderStatistics() {
                 </div>
 
                 <div class="statistic-widget">
-                    <h3>Progress Last 2 Week (updated in last 14 days)</h3>
+                    <h3>Progress Last 3 Week (updated in last 21 days)</h3>
                     ${renderTaskList(recentlyUpdated, false, false, true)}
                 </div>
 
                 <div class="statistic-widget">
-                    <h3>Finished Last 2 Week</h3>
+                    <h3>Finished Last 3 Week</h3>
                     ${renderTaskList(recentlyFinished, false, true, false)}
                 </div>
             </div>

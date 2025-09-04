@@ -339,3 +339,23 @@ export async function getCategoriesFromServer() {
         throw error;
     }
 }
+
+/**
+ * Gets task counts by status from the server.
+ * @param {number} since - Optional number of days to look back.
+ * @returns {Promise<object>} An object with status counts.
+ */
+export async function getTaskCounts(since = null) {
+    try {
+        const params = new URLSearchParams();
+        if (since) {
+            params.append('updatedSince', since);
+        }
+        const url = `${API_BASE_URL}/get-task-counts?${params.toString()}`;
+        const response = await fetch(url, _withAuth());
+        return await handleApiResponse(response);
+    } catch (error) {
+        console.error('Failed to get task counts from server:', error);
+        throw error;
+    }
+}
