@@ -977,3 +977,139 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 .show-next-btn:hover {
   background-color: #206bbd;
 }
+
+
+/* Basic styling for the dropdown menu */
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-content {
+  display: none;
+  position: absolute;
+  background-color: #f9f9f9;
+  min-width: 160px;
+  box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+  z-index: 1;
+  right: 0; /* Align to the right of the parent */
+  border-radius: 6px;
+  overflow: hidden; /* Ensures rounded corners on children */
+}
+
+.dropdown-content button {
+  color: black;
+  padding: 12px 16px;
+  text-decoration: none;
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 0; /* Reset border-radius for individual buttons within dropdown */
+}
+
+.dropdown-content button:hover {
+  background-color: #f1f1f1;
+}
+
+.dropdown-content.show {
+  display: block;
+}
+
+/* Styles for the filter section toggle - now handled by parent column */
+/* The filters-collapsible class itself will always be displayed within the column */
+.filters-collapsible {
+  /* This ensures the content itself is visible within its parent container */
+  display: block;
+}
+
+/* Style for the date inputs to make them align nicely */
+.date-inputs {
+  display: flex;
+  gap: 8px;
+}
+.date-inputs input {
+  flex: 1;
+}
+
+/* Style for task item dates to stack or flow */
+.task-item .right .date-info {
+  font-size: 11px; /* Smaller font for dates */
+  color: var(--muted);
+  text-align: right;
+  margin-top: 2px;
+}
+.task-item .right .date-info span {
+  display: block; /* Stack dates for clarity in list view */
+}
+/* Specific styles for filter date ranges to be inline */
+.filter-date-group {
+  display: flex;
+  flex-direction: column; /* Stack label and input group */
+  gap: 4px; /* Space between label and inputs */
+  margin-bottom: 8px; /* Space between date groups */
+}
+.filter-date-group .date-inputs-inline {
+  display: flex;
+  gap: 8px; /* Space between from and to inputs */
+}
+.filter-date-group .date-inputs-inline input {
+  flex: 1; /* Make inputs take equal space */
+}
+
+/* New styles for group by headers */
+.group-header {
+    font-weight: 700;
+    margin-top: 15px;
+    margin-bottom: 5px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #e7eaf2;
+    color: var(--accent);
+    font-size: 1.1em;
+}
+
+/* Styles for task selection modal */
+.task-selection-list {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 15px;
+}
+.task-selection-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px dashed #eee;
+}
+.task-selection-item:last-child {
+    border-bottom: none;
+}
+.task-selection-item input[type="checkbox"] {
+    margin-right: 10px;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+.task-selection-item label {
+    flex-grow: 1;
+    cursor: pointer;
+}
+.task-selection-actions {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 15px;
+}
+.task-selection-actions button {
+    padding: 8px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    border: 1px solid #ccc;
+    background-color: #f0f0f0;
+}
+.task-selection-actions button:hover {
+    background-color: #e0e0e0;
+}
