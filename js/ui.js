@@ -10,6 +10,7 @@ import * as TaskEditorUI from './taskEditorUI.js';
 import * as TaskViewerUI from './taskViewerUI.js'; // New: Import TaskViewerUI
 import * as MilestoneGraphUI from './milestoneGraphUI.js';
 import * as MilestoneEditorUI from './milestoneEditorUI.js';
+import * as StatisticUI from './statisticUI.js';
 import { showModalAlert } from './utilUI.js'; // Just for error/info modals
 
 export const UI = (function() {
@@ -107,6 +108,8 @@ export const UI = (function() {
 
     // MilestoneEditorUI needs: initial state, and callbacks to re-render milestone bubbles, and update current milestone in graph
     MilestoneEditorUI.initMilestoneEditorUI(commonState, MilestoneGraphUI.renderMilestoneBubbles, MilestoneGraphUI.updateCurrentMilestone);
+
+    StatisticUI.renderStatistics();
 
   }
 

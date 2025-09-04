@@ -127,7 +127,7 @@ export async function openTaskViewer(task, isNewTask = false) {
 
   // Get references to the editor and placeholder elements
   const editorElement = document.querySelector('#editorArea .editor');
-  const placeholderElement = document.querySelector('#editorArea .placeholder');
+  const placeholderElement = document.querySelector('#editorArea #statistics-placeholder');
 
   // Only attempt to set display if the elements exist
   if (editorElement) {
@@ -196,7 +196,7 @@ function renderAttachments(){
 export function clearViewerArea() {
   const viewerElement = document.querySelector(selectors.viewerArea);
   const editorElement = document.querySelector('#editorArea .editor');
-  const placeholderElement = document.querySelector('#editorArea .placeholder');
+  const placeholderElement = document.querySelector('#editorArea #statistics-placeholder');
 
   if (viewerElement) {
     viewerElement.style.display = 'none';

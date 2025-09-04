@@ -1113,3 +1113,51 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 .task-selection-actions button:hover {
     background-color: #e0e0e0;
 }
+
+.statistics-section {
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    height: 100%;
+    overflow-y: auto;
+}
+
+.statistics-section h2 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 10px;
+}
+
+.statistic-widget {
+    margin-bottom: 20px;
+    padding: 15px;
+    background-color: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+}
+
+.statistic-widget h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 1.1em;
+}
+
+.statistic-widget ul {
+    list-style-type: none;
+    padding-left: 0;
+    margin: 0;
+}
+
+.statistic-widget li {
+    padding: 5px 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.statistic-widget li:last-child {
+    border-bottom: none;
+}
+
+.statistic-widget .error {
+    color: var(--danger);
+}
