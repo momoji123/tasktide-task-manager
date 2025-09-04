@@ -63,10 +63,12 @@ export const UI = (function() {
     // These functions will be responsible for hiding the editor/viewer and showing the left menu
     const closeEditor = () => {
       TaskEditorUI.clearEditorArea(); // This also handles showing left menu on mobile
+      LeftMenuTaskUI.clearTaskSelection();
     };
 
     const closeViewer = () => {
       TaskViewerUI.clearViewerArea(); // This also handles showing left menu on mobile
+      LeftMenuTaskUI.clearTaskSelection();
     };
 
 

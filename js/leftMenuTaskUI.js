@@ -479,3 +479,11 @@ export function showLeftMenu() {
     appContainer.classList.add('sidebar-active');
   }
 }
+
+export function clearTaskSelection() {
+  const previouslySelected = document.querySelector('.selected-task-item');
+  if (previouslySelected) {
+    previouslySelected.classList.remove('selected-task-item');
+  }
+  currentSelectedTaskId = null;
+}
