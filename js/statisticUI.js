@@ -132,7 +132,10 @@ export async function renderStatistics() {
 
         let statisticsHTML = `
             <div class="statistics-section">
-                <h2>Statistics</h2>
+                <div class="viewer-header">
+                    <h2>Statistics</h2>
+                    <button id="refresh-statistics-btn" class="action-btn">Refresh</button>
+                </div>
 
                 <div class="statistic-widget">
                     <h3>Task Counts by Status</h3>
@@ -164,6 +167,12 @@ export async function renderStatistics() {
         `;
 
         placeholder.innerHTML = statisticsHTML;
+
+        const refreshButton = document.getElementById('refresh-statistics-btn');
+        if (refreshButton) {
+            refreshButton.addEventListener('click', renderStatistics);
+        }
+
     } catch (error) {
         console.error('Failed to render statistics:', error);
         placeholder.innerHTML = '<div class="error">Failed to load statistics.</div>';
