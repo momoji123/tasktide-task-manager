@@ -134,7 +134,8 @@ export async function renderStatistics() {
 
         
         const taskWithDeadline = await apiService.loadTasksSummaryFromServer({
-            deadlineRT: new Date(now.getTime() + sevenDaysInMs).toISOString().split('T')[0]
+            deadlineRT: new Date(now.getTime() + sevenDaysInMs).toISOString().split('T')[0],
+            hasFinishDate: false
         }, { limit: 100 });
 
         const updatedTasks = await apiService.loadTasksSummaryFromServer({

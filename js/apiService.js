@@ -172,6 +172,7 @@ export async function loadTasksSummaryFromServer(filters = {}, pagination = {}) 
         if (filters.finishedRF) params.append('finishedRF', filters.finishedRF);
         if (filters.finishedRT) params.append('finishedRT', filters.finishedRT);
         if (filters.groupBy) params.append('groupBy', filters.groupBy);
+        if (filters.hasFinishDate !== undefined) params.append('hasFinishDate', filters.hasFinishDate);
         
 
         // Add pagination parameters

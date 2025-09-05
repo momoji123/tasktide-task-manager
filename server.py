@@ -458,6 +458,7 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
                 deadline_to = query_params.get('deadlineRT', [''])[0]
                 finished_from = query_params.get('finishedRF', [''])[0]
                 finished_to = query_params.get('finishedRT', [''])[0]
+                has_finish_date_str = query_params.get('hasFinishDate', [None])[0]
                 
                 # Pagination parameters
                 limit = int(query_params.get('limit', [10])[0])
@@ -511,6 +512,9 @@ class SimpleTaskServerHandler(http.server.SimpleHTTPRequestHandler):
                 add_date_filter('updatedAt', updated_from, updated_to)
                 add_date_filter('deadline', deadline_from, deadline_to)
                 add_date_filter('finishDate', finished_from, finished_to)
+
+                if has_finish_date_str == 'false':
+                    sql_query += " AND (finishDate IS NULL OR finishDate = '')"
 
                 # Apply sorting
                 sort_expressions = []
