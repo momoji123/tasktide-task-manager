@@ -1161,3 +1161,12 @@ html,body,#app{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;font
 .statistic-widget .error {
     color: var(--danger);
 }
+
+.clickable-task {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.clickable-task:hover {
+    background-color: #f0f2f7;
+}

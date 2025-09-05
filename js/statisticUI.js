@@ -1,9 +1,12 @@
 // js/statisticUI.js
 import { DB } from './storage.js';
 import * as apiService from './apiService.js';
+import { openTaskViewer } from './taskViewerUI.js';
 
 const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
 const threeWeeksInMs = 21 * 24 * 60 * 60 * 1000;
+
+let allTasks = [];
 
 function getDueSoonAndOverdueTasks(tasks) {
     const dueSoon = [];
@@ -97,7 +100,7 @@ function renderTaskList(tasks, showDeadline = true, showFinishDate = true, showU
         let finishDateText = showFinishDate && task.finishDate ? ` (Finished: ${new Date(task.finishDate).toLocaleDateString()})` : '';
         let updatedDateText = showUpdatedDate && task.updatedAt ? ` (Updated: ${new Date(task.updatedAt).toLocaleDateString()})` : '';
 
-        return `<li>${task.title}${deadlineText}${finishDateText}${updatedDateText}</li>`;
+        return `<li class="clickable-task" data-task-id="${task.id}">${task.title}${deadlineText}${finishDateText}${updatedDateText}</li>`;
     }).join('');
     
 
@@ -106,6 +109,17 @@ function renderTaskList(tasks, showDeadline = true, showFinishDate = true, showU
             ${listItems}
         </ul>
     `;
+}
+
+function handleTaskListClick(event) {
+    const target = event.target.closest('.clickable-task');
+    if (target) {
+        const taskId = target.dataset.taskId;
+        const task = allTasks.find(t => t.id === taskId);
+        if (task) {
+            openTaskViewer(task);
+        }
+    }
 }
 
 export async function renderStatistics() {
@@ -131,6 +145,8 @@ export async function renderStatistics() {
             finishedRF: new Date(now.getTime() - threeWeeksInMs).toISOString().split('T')[0]
         }, { limit: 100 });
 
+        allTasks = [...taskWithDeadline, ...updatedTasks, ...finishedTask];
+
         const { dueSoon, overdue } = getDueSoonAndOverdueTasks(taskWithDeadline);
         const recentlyUpdated = getRecentlyUpdatedTasks(updatedTasks);
         const recentlyFinished = getRecentlyFinishedTasks(finishedTask);
@@ -149,22 +165,22 @@ export async function renderStatistics() {
                     </ul>
                 </div>
 
-                <div class="statistic-widget">
+                <div class="statistic-widget task-list-widget">
                     <h3>Due Soon (<= 7 days)</h3>
                     ${renderTaskList(dueSoon, true, false, false)}
                 </div>
 
-                <div class="statistic-widget">
+                <div class="statistic-widget task-list-widget">
                     <h3>Overdue Tasks</h3>
                     ${renderTaskList(overdue, true, false, false)}
                 </div>
 
-                <div class="statistic-widget">
+                <div class="statistic-widget task-list-widget">
                     <h3>Progress Last 3 Week (updated in last 21 days)</h3>
                     ${renderTaskList(recentlyUpdated, false, false, true)}
                 </div>
 
-                <div class="statistic-widget">
+                <div class="statistic-widget task-list-widget">
                     <h3>Finished Last 3 Week</h3>
                     ${renderTaskList(recentlyFinished, false, true, false)}
                 </div>
@@ -177,6 +193,10 @@ export async function renderStatistics() {
         if (refreshButton) {
             refreshButton.addEventListener('click', renderStatistics);
         }
+
+        document.querySelectorAll('.task-list-widget').forEach(widget => {
+            widget.addEventListener('click', handleTaskListClick);
+        });
 
     } catch (error) {
         console.error('Failed to render statistics:', error);
