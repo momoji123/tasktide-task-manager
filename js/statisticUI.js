@@ -63,6 +63,48 @@ function getRecentlyFinishedTasks(tasks) {
     return recentlyFinished;
 }
 
+function groupTasksByWeek(tasks, dateField) {
+    const now = new Date();
+    const oneWeekInMs = 7 * 24 * 60 * 60 * 1000;
+    const groupedTasks = {
+        "Week 1 (last 7 days)": [],
+        "Week 2 (7-14 days ago)": [],
+        "Week 3 (14-21 days ago)": []
+    };
+
+    for (const task of tasks) {
+        if (task[dateField]) {
+            const taskDate = new Date(task[dateField]);
+            const diff = now - taskDate;
+
+            if (diff <= oneWeekInMs) {
+                groupedTasks["Week 1 (last 7 days)"].push(task);
+            } else if (diff <= oneWeekInMs * 2) {
+                groupedTasks["Week 2 (7-14 days ago)"].push(task);
+            } else if (diff <= oneWeekInMs * 3) {
+                groupedTasks["Week 3 (14-21 days ago)"].push(task);
+            }
+        }
+    }
+    return groupedTasks;
+}
+
+function renderWeeklyTaskList(groupedTasks, showDeadline, showFinishDate, showUpdatedDate) {
+    let html = '';
+    for (const week in groupedTasks) {
+        if (groupedTasks[week].length > 0) {
+            html += `
+                <details open>
+                    <summary>${week}</summary>
+                    ${renderTaskList(groupedTasks[week], showDeadline, showFinishDate, showUpdatedDate)}
+                </details>
+            `;
+        }
+    }
+    return html || '<div>Nothing to show.</div>';
+}
+
+
 function renderTaskList(tasks, showDeadline = true, showFinishDate = true, showUpdatedDate = true) {
     if (!tasks || tasks.length === 0) {
         return '<div>Nothing to show.</div>';
@@ -152,6 +194,9 @@ export async function renderStatistics() {
         const recentlyUpdated = getRecentlyUpdatedTasks(updatedTasks);
         const recentlyFinished = getRecentlyFinishedTasks(finishedTask);
 
+        const weeklyUpdated = groupTasksByWeek(recentlyUpdated, 'updatedAt');
+        const weeklyFinished = groupTasksByWeek(recentlyFinished, 'finishDate');
+
         let statisticsHTML = `
             <div class="statistics-section">
                 <div class="viewer-header">
@@ -178,12 +223,12 @@ export async function renderStatistics() {
 
                 <div class="statistic-widget task-list-widget">
                     <h3>Progress Last 3 Week (updated in last 21 days)</h3>
-                    ${renderTaskList(recentlyUpdated, false, false, true)}
+                    ${renderWeeklyTaskList(weeklyUpdated, false, false, true)}
                 </div>
 
                 <div class="statistic-widget task-list-widget">
                     <h3>Finished Last 3 Week</h3>
-                    ${renderTaskList(recentlyFinished, false, true, false)}
+                    ${renderWeeklyTaskList(weeklyFinished, false, true, false)}
                 </div>
             </div>
         `;
