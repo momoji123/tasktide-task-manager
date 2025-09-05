@@ -22,7 +22,7 @@ DB_FILE = "./data/tasks.db"
 # Secret key for JWT. In a real application, this should be loaded from
 # an environment variable or a secure configuration management system.
 # DO NOT expose this in source control in production.
-SECRET_KEY = "your_super_secret_jwt_key_please_change_this!".encode('utf-8') # Must be bytes for hmac
+SECRET_KEY = os.getenv("AUTH_PEPPER_JWT", "your_super_secret_jwt_key_please_change_this!").encode('utf-8') # Must be bytes for hmac
 
 # --- JWT Helper Functions (Manual Implementation) ---
 
